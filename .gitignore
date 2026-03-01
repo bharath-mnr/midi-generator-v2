@@ -1,0 +1,26 @@
+node_modules/
+.DS_Store
+*.log
+npm-debug.log*
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env.production
+
+# Build output
+frontend/dist/
+
+# SQLite database files
+backend/db/*.db
+backend/db/*.db-shm
+backend/db/*.db-wal
+backend/db/localRag.json
+
+# Uploaded and generated files
+backend/uploads/
+backend/outputs/
+
+# Editor
+.vscode/
+.idea/

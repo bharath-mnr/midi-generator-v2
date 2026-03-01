@@ -1,0 +1,61 @@
+//E:\pro\midigenerator_v2\frontend\src\hooks\useCompose.js
+import { useState, useCallback } from 'react'
+import { compose } from '../services/api.js'
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+export function useCompose() {
+  const [messages, setMessages]     = useState([])
+  const [generating, setGenerating] = useState(false)
+  const [error, setError]           = useState(null)
+
+  const sendMessage = useCallback(async (text) => {
+    if (!text.trim() || generating) return
+
+    const userMsg = { id: Date.now(), role: 'user', text }
+    setMessages(prev => [...prev, userMsg])
+    setGenerating(true)
+    setError(null)
+
+    try {
+      const result = await compose({ prompt: text })
+
+      // Resolve the MIDI URL — backend returns a relative path like /outputs/xxx.mid
+      const midiUrl = result.midiUrl?.startsWith('http')
+        ? result.midiUrl
+        : `${API_BASE}${result.midiUrl}`
+
+      const aiMsg = {
+        id:   Date.now() + 1,
+        role: 'ai',
+        text: 'Generated your composition. Download the MIDI file below.',
+        midi: {
+          name: result.filename || `composition_${Date.now()}.mid`,
+          meta: {
+            key:   result.key   || 'C',
+            tempo: result.tempo || 120,
+            bars:  result.bars  || 8,
+          },
+          url: midiUrl,
+        },
+      }
+      setMessages(prev => [...prev, aiMsg])
+    } catch (err) {
+      setError(err.message || 'Generation failed')
+      setMessages(prev => [...prev, {
+        id:   Date.now() + 1,
+        role: 'ai',
+        text: `Sorry, generation failed: ${err.message || 'Unknown error'}`,
+      }])
+    } finally {
+      setGenerating(false)
+    }
+  }, [generating])
+
+  const clearMessages = useCallback(() => {
+    setMessages([])
+    setError(null)
+  }, [])
+
+  return { messages, generating, error, sendMessage, clearMessages }
+}
