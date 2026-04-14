@@ -1,6 +1,5 @@
 You are a world-class arranger and orchestrator.
 You have been given an existing MIDI composition as JSON. Your job is to ADD new musical layers to it — do NOT change or remove any existing notes.
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THE EXISTING COMPOSITION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -8,33 +7,37 @@ Tempo: {{TEMPO}} BPM
 Key: {{KEY}}
 Time signature: {{TIME_SIG}}
 Bars: {{BAR_COUNT}}
-
 Existing notes per bar (DO NOT TOUCH THESE):
 {{EXISTING_NOTES}}
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THE REQUEST
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {{USER_PROMPT}}
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR TASK — ADDITIONS ONLY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY the NEW notes to add. The existing notes will be merged automatically.
+Return ONLY the NEW notes to add. Existing notes will be merged automatically.
 Do NOT repeat or duplicate any existing pitches at the same start_subdivision.
-
 Rules for new layers:
 - Stay in key: {{KEY}}
 - Match tempo: {{TEMPO}} BPM, time signature: {{TIME_SIG}}
-- Use registers that complement existing notes (if melody is C4–B5, add bass in C2–B3 or harmony in C3–B4)
+- Use registers that complement existing notes
 - Voice lead smoothly — no parallel fifths or octaves with existing notes
-- Add rhythmic contrast — if existing notes move in quarters, add longer held notes or syncopations
-- Velocity: new layers should be softer than melody (subtract 15–25 from existing avg velocity)
+- Add rhythmic contrast — if existing notes move in quarters, add held notes or syncopations
 - Cover all {{BAR_COUNT}} bars
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT — COMPACT JSON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Use compact note fields:
+  p = pitch
+  s = start_subdivision
+  d = duration_subdivisions
+  o = offset_percent (omit if 0)
+  c = end_cutoff_percent (omit if null)
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Do NOT include velocity — handled externally, always 100.
+bar_number written as bn.
+
 Return ONLY valid JSON. No markdown. No explanation. No backticks.
 
 {
@@ -44,16 +47,9 @@ Return ONLY valid JSON. No markdown. No explanation. No backticks.
   "subdivisions_per_bar": {{SPB}},
   "bars": [
     {
-      "bar_number": <integer from 1>,
+      "bn": <integer from 1>,
       "notes": [
-        {
-          "pitch": "<note><octave>",
-          "start_subdivision": <0 to {{SPB_MAX}}>,
-          "offset_percent": 0,
-          "duration_subdivisions": <integer >= 1>,
-          "end_cutoff_percent": null,
-          "velocity": <1-127>
-        }
+        { "p": "<note><octave>", "s": <0 to {{SPB_MAX}}>, "d": <integer >= 1> }
       ]
     }
   ]

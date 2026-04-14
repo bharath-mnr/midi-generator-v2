@@ -15,46 +15,52 @@ If reference material is provided above:
 - Study the PITCH CLASSES in the harmony chunks — use similar note choices
 - Mirror the RHYTHMIC DENSITY from the structure chunks (notes per bar)
 - Copy the REGISTER LAYOUT from voice chunks (which octaves each voice uses)
-- Replicate the VELOCITY CONTOUR (dynamics) from the voice chunks
 Do NOT copy notes verbatim. Use the material as a stylistic blueprint.
 
-## COMPOSITION STANDARDS — READ CAREFULLY
+## COMPOSITION STANDARDS
 
 ### Harmonic richness
-- Use full chord voicings (3–4 simultaneous notes minimum in chordal passages)
-- Add 7ths, 9ths, suspensions to chords for colour
+- Use full chord voicings (3–4 simultaneous notes in chordal passages)
+- Add 7ths, 9ths, suspensions for colour
 - Plan a real chord progression — don't just repeat I-IV-V
-- Use secondary dominants, borrowed chords, or modal mixture for interest
-- Voice lead smoothly: inner voices should move by step or stay still
+- Use secondary dominants, borrowed chords, or modal mixture
+- Voice lead smoothly: inner voices move by step or stay still
 
 ### Melodic quality
-- Write a singable melody with a clear shape: rise, climax, descent
-- Use a mix of steps (2nds) and leaps (3rds, 4ths, 6ths)
+- Write a singable melody: clear shape — rise, climax, descent
+- Mix steps (2nds) and leaps (3rds, 4ths, 6ths)
 - Avoid too many repeated notes
-- Give the melody rhythmic variation — not just quarter notes
-- Use motifs: a short idea that returns and develops
+- Rhythmic variation — not just quarter notes
+- Use motifs that return and develop
 
 ### Rhythmic interest
 - Mix note lengths: quarters, eighths, halves, dotted rhythms
-- Use syncopation (notes starting on offbeats: subdivisions 2, 6, 10, 14)
-- Add rhythmic contrast between voices (melody moves fast, bass moves slow)
-- Avoid all voices moving at the same rhythm at the same time
+- Syncopation: notes starting on offbeats (s=2,6,10,14)
+- Rhythmic contrast between voices
+- Avoid all voices moving at the same rhythm simultaneously
 
-### Structure and dynamics
-- Shape the piece: start moderate, build to a climax, resolve at the end
-- Vary velocity across the piece — use the full range pp(20) to ff(127)
+### Structure
+- Shape the piece: start moderate, build to climax, resolve at end
 - Leave occasional rests in the melody for breathing room
-- Give bar 1 a strong opening and the final bar a satisfying resolution
+- Strong opening bar 1, satisfying resolution in final bar
 
 ### Voice independence
-- Each voice should have its own rhythm and character
-- Bass: roots and fifths, mostly quarter/half notes, low register (C2–B3)
-- Inner harmony: chords and countermelody, mid register (C3–B4)
+- Bass: roots and fifths, quarter/half notes, low register (C2–B3)
+- Inner harmony: chords, mid register (C3–B4)
 - Melody: singable line, upper register (C4–B6)
-- Avoid all voices moving in parallel
+- Avoid parallel motion between voices
 
 ## JSON OUTPUT FORMAT
 Return ONLY valid JSON. No markdown. No explanation. No backticks.
+
+Use COMPACT note fields to save tokens:
+  p = pitch          (required)
+  s = start_subdivision  (required)
+  d = duration_subdivisions  (required)
+  o = offset_percent  (omit if 0)
+  c = end_cutoff_percent  (omit if null)
+
+Do NOT include velocity — it is handled externally and set to 100.
 
 {
   "tempo": <integer BPM>,
@@ -63,43 +69,29 @@ Return ONLY valid JSON. No markdown. No explanation. No backticks.
   "subdivisions_per_bar": <N * (16/D)>,
   "bars": [
     {
-      "bar_number": <integer from 1>,
+      "bn": <integer from 1>,
       "notes": [
-        {
-          "pitch": "<note><octave>",
-          "start_subdivision": <0 to subdivisions_per_bar-1>,
-          "offset_percent": 0,
-          "duration_subdivisions": <integer >= 1>,
-          "end_cutoff_percent": null,
-          "velocity": <1-127>
-        }
+        { "p": "<note><octave>", "s": <0 to spb-1>, "d": <integer >= 1> }
       ]
     }
   ]
 }
 
 ## SUBDIVISION REFERENCE (4/4 = 16 subdivisions per bar)
-Beat 1 = sub 0    Beat 2 = sub 4    Beat 3 = sub 8    Beat 4 = sub 12
-Offbeats: 2, 6, 10, 14  (eighth note offbeats)
-Sixteenth offbeats: 1, 3, 5, 7, 9, 11, 13, 15
+Beat 1=s0  Beat 2=s4  Beat 3=s8  Beat 4=s12
+Offbeats: s2,s6,s10,s14  Sixteenth offbeats: s1,s3,s5,s7,s9,s11,s13,s15
 
-Note durations:
-  Whole     = 16   Half      = 8    Quarter   = 4
-  Dotted ½  = 12   Dotted ¼  = 6    Eighth    = 2    Sixteenth = 1
+Durations:  Whole=16  Half=8  Quarter=4  Dotted½=12  Dotted¼=6  Eighth=2  Sixteenth=1
 
-Cross-bar notes: set duration_subdivisions to the FULL length.
-A note lasting 3 bars = duration 48. Only include it in its STARTING bar.
-
-## VELOCITY DYNAMICS
-pp=20-40  p=40-60  mp=60-80  mf=80-100  f=100-115  ff=115-127
-Use a smooth dynamic arc across the piece.
+Cross-bar notes: set d to FULL length. 3 bars = d:48. Include only in starting bar.
 
 ## FINAL CHECK BEFORE OUTPUT
-✓ Are there at least 2 independent voices?
-✓ Does the melody have a clear shape and rhythmic variety?
-✓ Is the harmony richer than basic triads?
-✓ Does velocity change across the piece?
-✓ Does the final bar resolve clearly?
-✓ Are all subdivisions within 0 to (subdivisions_per_bar - 1)?
+✓ At least 2 independent voices?
+✓ Melody has clear shape and rhythmic variety?
+✓ Harmony richer than basic triads?
+✓ Final bar resolves clearly?
+✓ All s values within 0 to (subdivisions_per_bar - 1)?
+✓ No velocity field anywhere?
+✓ bar_number written as bn?
 
 Return ONLY the JSON.

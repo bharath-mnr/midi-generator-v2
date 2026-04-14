@@ -14,17 +14,23 @@ You must fix ALL errors and return a corrected JSON.
 {{ERRORS}}
 
 ## RULES (same as before — read carefully)
+PITCH FORMAT: C4, D#3, Bb2, F#5 — scientific notation with octave number. Use as p field.
 
-PITCH FORMAT: C4, D#3, Bb2, F#5 — scientific notation with octave number.
+COMPACT NOTE FORMAT: { "p":"C4", "s":0, "d":4 }
+  p = pitch (required)
+  s = start_subdivision (required, 0 to spb-1)
+  d = duration_subdivisions (required, >= 1)
+  o = offset_percent (optional, omit if 0)
+  c = end_cutoff_percent (optional, omit if null)
+  NO velocity field — never include it.
 
-SUBDIVISION RULES (the most common source of errors):
-- 4/4 → subdivisions_per_bar = 16
-- 3/4 → subdivisions_per_bar = 12
-- 6/8 → subdivisions_per_bar = 12
-- start_subdivision must be 0 to (subdivisions_per_bar - 1)
-- duration_subdivisions must be >= 1
-- velocity must be 1–127
-- offset_percent and end_cutoff_percent must be 0–100 or null
+bar_number written as bn.
+
+SUBDIVISION RULES:
+- 4/4 → subdivisions_per_bar = 16, s range 0–15
+- 3/4 → subdivisions_per_bar = 12, s range 0–11
+- 6/8 → subdivisions_per_bar = 12, s range 0–11
+- d must be >= 1
 
 OUTPUT: Return ONLY the corrected JSON object. No explanation, no markdown, no backticks.
 Fix every single error listed above. Do not introduce new errors.

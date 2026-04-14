@@ -1,11 +1,28 @@
-//E:\pro\midigenerator_v2\frontend\src\components\tools\JsonToMidi.jsx
+// frontend/src/components/tools/JsonToMidi.jsx
+// Accepts compact shorthand (p/s/d/bn) AND original full field names.
+// velocity is always 100 — never read from JSON input.
 
 import { useState } from 'react'
 import { Activity, Download } from '../shared/Icons.jsx'
 import StatusBar from '../shared/StatusBar.jsx'
 import ErrorDisplay from '../shared/ErrorDisplay.jsx'
 
-const noteMap = { 'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'F':5,'F#':6,'GB':6,'G':7,'G#':8,'AB':8,'A':9,'A#':10,'BB':10,'B':11 }
+const noteMap = {
+  'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'F':5,'F#':6,'GB':6,'G':7,'G#':8,'AB':8,
+  'A':9,'A#':10,'BB':10,'B':11,
+}
+
+// ── Expand compact note to full ───────────────────────────────────────────────
+function normNote(n) {
+  return {
+    pitch:                 n.pitch                ?? n.p,
+    start_subdivision:     n.start_subdivision    ?? n.s ?? 0,
+    offset_percent:        n.offset_percent       ?? n.o ?? 0,
+    duration_subdivisions: n.duration_subdivisions ?? n.d ?? 4,
+    end_cutoff_percent:    n.end_cutoff_percent   ?? n.c ?? null,
+    velocity:              100,
+  }
+}
 
 class Engine {
   static getSubsPerBar(ts) {
@@ -37,11 +54,12 @@ class Engine {
     const midiEvents = []
     for (const bar of bars) {
       if (!bar.notes) continue
-      const barBase = (bar.bar_number - 1) * barTicks
-      for (const note of bar.notes) {
-        const mp = this.pitchToMidi(note.pitch)
-        const vel = Math.min(127, Math.max(1, note.velocity || 100))
-        const startTick = barBase + note.start_subdivision * tpSub + ((note.offset_percent || 0) / 100) * tpSub
+      const barBase = ((bar.bar_number ?? bar.bn) - 1) * barTicks
+      for (const rawNote of bar.notes) {
+        const note = normNote(rawNote)
+        const mp  = this.pitchToMidi(note.pitch)
+        const vel = 100
+        const startTick = barBase + note.start_subdivision * tpSub + (note.offset_percent / 100) * tpSub
         let durTicks
         if (note.duration_subdivisions === 0) {
           durTicks = ((note.end_cutoff_percent || 50) / 100) * tpSub
@@ -93,91 +111,118 @@ class Engine {
   }
 }
 
+// ── Sample uses compact format ────────────────────────────────────────────────
 const SAMPLE = JSON.stringify({
-  tempo: 85, time_signature: "4/4", key: "Dm",
+  tempo: 85, time_signature: '4/4', key: 'Dm',
+  subdivisions_per_bar: 16,
   bars: [
-    { bar_number: 1, notes: [
-      { pitch: "D2",  start_subdivision: 0, offset_percent: 0, duration_subdivisions: 16, end_cutoff_percent: null, velocity: 40 },
-      { pitch: "F4",  start_subdivision: 4, offset_percent: 0, duration_subdivisions: 4,  end_cutoff_percent: null, velocity: 65 },
-      { pitch: "A4",  start_subdivision: 8, offset_percent: 0, duration_subdivisions: 8,  end_cutoff_percent: null, velocity: 75 },
+    { bn: 1, notes: [
+      { p: 'D2', s: 0, d: 16 },
+      { p: 'F4', s: 4, d: 4 },
+      { p: 'A4', s: 8, d: 8 },
     ]},
-    { bar_number: 2, notes: [
-      { pitch: "D2",  start_subdivision: 0, offset_percent: 0, duration_subdivisions: 16, end_cutoff_percent: null, velocity: 40 },
-      { pitch: "A4",  start_subdivision: 0, offset_percent: 0, duration_subdivisions: 8,  end_cutoff_percent: null, velocity: 90 },
-    ]}
-  ]
+    { bn: 2, notes: [
+      { p: 'D2', s: 0, d: 16 },
+      { p: 'A4', s: 0, d: 8 },
+    ]},
+  ],
 }, null, 2)
 
 export default function JsonToMidi() {
-  const [input, setInput] = useState(SAMPLE)
+  const [input,  setInput]  = useState(SAMPLE)
   const [errors, setErrors] = useState([])
-  const [processing, setProcessing] = useState(false)
-  const [done, setDone] = useState(false)
-  const [stats, setStats] = useState(null)
-  const [jsonValid, setJsonValid] = useState(true)
+  const [status, setStatus] = useState(null)
+  const [stats,  setStats]  = useState(null)
 
-  const handleInputChange = (v) => {
-    setInput(v); setDone(false)
-    try { JSON.parse(v); setJsonValid(true) } catch { setJsonValid(false) }
-  }
+  const valid = (() => { try { JSON.parse(input); return true } catch { return false } })()
 
-  const handleConvert = () => {
-    setProcessing(true); setErrors([]); setDone(false); setStats(null)
-    setTimeout(() => {
-      try {
-        const json = JSON.parse(input)
-        const bytes = Engine.convert(json)
-        const blob = new Blob([bytes], { type: 'audio/midi' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a'); a.href = url
-        a.download = `${json.key || 'output'}_${json.tempo}bpm.mid`
-        document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); document.body.removeChild(a)
-        setStats({ bars: json.bars.length, notes: json.bars.reduce((a, b) => a + (b.notes?.length || 0), 0), size: `${(bytes.length / 1024).toFixed(1)} KB` })
-        setDone(true)
-      } catch (e) { setErrors([e.message]) }
-      finally { setProcessing(false) }
-    }, 0)
+  const convert = () => {
+    setErrors([]); setStatus(null); setStats(null)
+    try {
+      const json  = JSON.parse(input)
+      const bytes = Engine.convert(json)
+      const blob  = new Blob([bytes], { type: 'audio/midi' })
+      const url   = URL.createObjectURL(blob)
+      const a     = document.createElement('a')
+      a.href      = url
+      a.download  = `${json.key || 'composition'}_${json.tempo}bpm.mid`
+      document.body.appendChild(a); a.click()
+      URL.revokeObjectURL(url); document.body.removeChild(a)
+      const totalNotes = json.bars.reduce((s, b) => s + (b.notes?.length || 0), 0)
+      setStats({ bars: json.bars.length, notes: totalNotes, tempo: json.tempo })
+      setStatus('ok')
+    } catch (e) {
+      setErrors([e.message])
+      setStatus('error')
+    }
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16 }}>
+      {/* Field reference */}
+      <div style={{
+        background: 'var(--surface2)', border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-sm)', padding: '10px 14px',
+        fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)',
+        lineHeight: 1.8,
+      }}>
+        <span style={{ color: 'var(--text2)', fontWeight: 600 }}>Compact fields: </span>
+        <span style={{ color: 'var(--accent)' }}>p</span>=pitch&nbsp;&nbsp;
+        <span style={{ color: 'var(--accent)' }}>s</span>=start_subdivision&nbsp;&nbsp;
+        <span style={{ color: 'var(--accent)' }}>d</span>=duration_subdivisions&nbsp;&nbsp;
+        <span style={{ color: 'var(--text3)' }}>o</span>=offset (omit if 0)&nbsp;&nbsp;
+        <span style={{ color: 'var(--text3)' }}>c</span>=cutoff (omit if null)&nbsp;&nbsp;
+        <span style={{ color: 'var(--text3)' }}>bn</span>=bar_number&nbsp;&nbsp;
+        <span style={{ color: 'rgba(245,85,74,0.8)' }}>velocity removed</span> (always 100)
+      </div>
+
+      {/* Input */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>JSON Input</div>
-          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, fontFamily: 'var(--mono)', border: `1px solid ${jsonValid ? 'rgba(200,240,96,0.2)' : 'rgba(240,96,96,0.2)'}`, color: jsonValid ? 'var(--accent)' : 'var(--danger)', background: jsonValid ? 'rgba(200,240,96,0.05)' : 'rgba(240,96,96,0.05)' }}>
-            {jsonValid ? '✓ valid' : '✗ invalid'}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>
+            JSON Input
+          </div>
+          <span style={{
+            fontSize: 10, fontFamily: 'var(--mono)', padding: '2px 7px',
+            borderRadius: 4,
+            background: valid ? 'rgba(184,245,74,0.07)' : 'rgba(245,85,74,0.07)',
+            color: valid ? 'var(--lime)' : 'var(--rose)',
+            border: `1px solid ${valid ? 'rgba(184,245,74,0.2)' : 'rgba(245,85,74,0.2)'}`,
+          }}>
+            {valid ? '✓ valid JSON' : '✗ invalid JSON'}
           </span>
         </div>
-        <textarea value={input} onChange={e => handleInputChange(e.target.value)} style={{ flex: 1, minHeight: 280, width: '100%', background: 'var(--surface2)', border: `1px solid ${jsonValid ? 'var(--border)' : 'rgba(240,96,96,0.3)'}`, borderRadius: 'var(--radius-sm)', padding: 12, color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 12, resize: 'vertical', outline: 'none', lineHeight: 1.7 }} />
-        <button onClick={handleConvert} disabled={processing || !input.trim() || !jsonValid} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 20px', borderRadius: 'var(--radius-sm)', background: processing || !input.trim() || !jsonValid ? 'var(--surface3)' : 'var(--accent)', color: processing || !input.trim() || !jsonValid ? 'var(--text3)' : '#000', fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none', fontFamily: 'var(--font)', alignSelf: 'flex-start' }}>
-          <Download size={14} />{processing ? 'Generating...' : 'Convert & Download'}
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          spellCheck={false}
+          style={{
+            minHeight: 260, width: '100%',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)', padding: 12,
+            color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 12,
+            resize: 'vertical', outline: 'none', lineHeight: 1.7,
+          }}
+        />
+        <button
+          onClick={convert}
+          disabled={!valid}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '10px 18px', borderRadius: 'var(--radius-sm)',
+            background: valid ? 'var(--accent)' : 'var(--surface3)',
+            color: valid ? '#000' : 'var(--text3)',
+            fontSize: 13, fontWeight: 700, cursor: valid ? 'pointer' : 'not-allowed',
+            border: 'none', transition: 'all 0.15s ease', alignSelf: 'flex-start',
+            fontFamily: 'var(--font)',
+          }}
+        >
+          <Download size={14} /> Convert & Download .mid
         </button>
         <ErrorDisplay errors={errors} />
-        {done && stats && <StatusBar status="ok" message={`Downloaded · ${stats.bars} bars · ${stats.notes} notes · ${stats.size}`} />}
-      </div>
-      {/* Field reference */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', letterSpacing: '0.5px', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>Field Reference</div>
-        <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 16, fontFamily: 'var(--mono)', fontSize: 11, lineHeight: 2 }}>
-          {[
-            ['tempo','number','BPM'],
-            ['time_signature','string','"4/4", "3/4", "6/8"'],
-            ['key','string','"Dm", "C", "Am"'],
-            ['bar_number','number','starts at 1'],
-            ['pitch','string','"D2", "A4"'],
-            ['start_subdivision','number','0–15 for 4/4'],
-            ['offset_percent','number','0–100 (0 = on beat)'],
-            ['duration_subdivisions','number','full subdivisions spanned'],
-            ['end_cutoff_percent','number|null','partial end, null = full'],
-            ['velocity','number','1–127'],
-          ].map(([f, t, d]) => (
-            <div key={f} style={{ display: 'flex', gap: 8 }}>
-              <span style={{ color: 'var(--accent)', width: 160, flexShrink: 0 }}>{f}</span>
-              <span style={{ color: 'var(--text3)', width: 80, flexShrink: 0 }}>{t}</span>
-              <span style={{ color: 'var(--text3)' }}>{d}</span>
-            </div>
-          ))}
-        </div>
+        {status === 'ok' && stats && (
+          <StatusBar status="ok" message={`Downloaded · ${stats.bars} bars · ${stats.notes} notes · ${stats.tempo} BPM · velocity=100`} />
+        )}
       </div>
     </div>
   )

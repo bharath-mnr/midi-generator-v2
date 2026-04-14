@@ -1,11 +1,20 @@
-//E:\pro\midigenerator_v2\backend\services\converters\jsonToMidi.js
-
 'use strict'
+// backend/services/converters/jsonToMidi.js
+// Accepts both full field names AND compact shorthand (p/s/d/bn/o/c).
+// velocity is always 100 — never read from note data.
 
 const NOTE_MAP = {
   'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,
   'E':4,'F':5,'F#':6,'GB':6,'G':7,'G#':8,'AB':8,
-  'A':9,'A#':10,'BB':10,'B':11
+  'A':9,'A#':10,'BB':10,'B':11,
+}
+
+function pitchToMidi(pitch) {
+  const m = pitch.match(/^([A-G][#Bb]?)(-?\d+)$/i)
+  if (!m) throw new Error(`Invalid pitch format: ${pitch}`)
+  const nn = m[1].toUpperCase()
+  if (!(nn in NOTE_MAP)) throw new Error(`Unknown note: ${nn}`)
+  return (parseInt(m[2]) + 1) * 12 + NOTE_MAP[nn]
 }
 
 function getSubsPerBar(ts) {
@@ -13,14 +22,6 @@ function getSubsPerBar(ts) {
   const s = n * (16 / d)
   if (!Number.isInteger(s)) throw new Error(`Invalid time signature: ${ts}`)
   return s
-}
-
-function pitchToMidi(pitch) {
-  const m = pitch.match(/^([A-G][#Bb]?)(-?\d+)$/i)
-  if (!m) throw new Error(`Invalid pitch format: ${pitch}`)
-  const nn = m[1].toUpperCase()
-  if (!(nn in NOTE_MAP)) throw new Error(`Unknown note name: ${nn}`)
-  return (parseInt(m[2]) + 1) * 12 + NOTE_MAP[nn]
 }
 
 function writeVL(v) {
@@ -31,21 +32,34 @@ function writeVL(v) {
   return bytes
 }
 
+// ── Normalise a note from compact or full format ──────────────────────────────
+function normaliseNote(n) {
+  return {
+    pitch:                 n.pitch                ?? n.p,
+    start_subdivision:     n.start_subdivision    ?? n.s ?? 0,
+    offset_percent:        n.offset_percent       ?? n.o ?? 0,
+    duration_subdivisions: n.duration_subdivisions ?? n.d ?? 4,
+    end_cutoff_percent:    n.end_cutoff_percent   ?? n.c ?? null,
+  }
+}
+
 function jsonToMidiEvents(json) {
   const { tempo, time_signature, bars } = json
   const [tn, td] = time_signature.split('/').map(Number)
-  const tpq   = 480
-  const subs  = getSubsPerBar(time_signature)
+  const tpq = 480
+  const subs = getSubsPerBar(time_signature)
   const barTicks = tpq * tn * (4 / td)
   const tpSub = barTicks / subs
   const midiEvents = []
 
   for (const bar of bars) {
     if (!bar.notes) continue
-    const barBase = (bar.bar_number - 1) * barTicks
-    for (const note of bar.notes) {
-      const mp  = pitchToMidi(note.pitch)
-      const vel = Math.min(127, Math.max(1, note.velocity || 100))
+    const barBase = ((bar.bar_number ?? bar.bn) - 1) * barTicks
+    for (const rawNote of bar.notes) {
+      const note = normaliseNote(rawNote)
+      const mp   = pitchToMidi(note.pitch)
+      const vel  = 100  // always fixed
+
       const startTick = barBase
         + note.start_subdivision * tpSub
         + ((note.offset_percent || 0) / 100) * tpSub
@@ -62,8 +76,8 @@ function jsonToMidiEvents(json) {
       }
 
       if (durTicks <= 0) continue
-      midiEvents.push({ tick: startTick,              type: 'on',  pitch: mp, velocity: vel })
-      midiEvents.push({ tick: startTick + durTicks,   type: 'off', pitch: mp, velocity: 0   })
+      midiEvents.push({ tick: startTick,            type: 'on',  pitch: mp, velocity: vel })
+      midiEvents.push({ tick: startTick + durTicks, type: 'off', pitch: mp, velocity: 0   })
     }
   }
 
