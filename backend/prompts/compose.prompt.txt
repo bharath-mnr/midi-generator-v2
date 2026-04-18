@@ -31,7 +31,7 @@ Do NOT copy notes verbatim. Use the material as a stylistic blueprint.
 - Mix steps (2nds) and leaps (3rds, 4ths, 6ths)
 - Avoid too many repeated notes
 - Rhythmic variation — not just quarter notes
-- Use motifs that return and develop
+- Use motifs that return and develop (invert, augment, sequence)
 
 ### Rhythmic interest
 - Mix note lengths: quarters, eighths, halves, dotted rhythms
@@ -50,6 +50,42 @@ Do NOT copy notes verbatim. Use the material as a stylistic blueprint.
 - Melody: singable line, upper register (C4–B6)
 - Avoid parallel motion between voices
 
+## ARTICULATION — USE c AND o FIELDS FOR EXPRESSION
+These two optional fields are your expressive tools — use them deliberately:
+
+### c = end_cutoff_percent (staccato/legato control)
+Omit c for legato (note rings to near-full duration — default, smooth, lyrical).
+Add c for shorter articulations:
+  c:75  → slightly detached (walking bass, inner chord notes)
+  c:60  → marcato/portato (melody accents, punchy inner voices)
+  c:45  → staccato (light, bouncy passages)
+  c:30  → very staccato (pizzicato-style, percussive attacks)
+  c:50 with d:0 → grace note / ghost note (very short ornament)
+
+Use legato (omit c) for: melody long tones, sustained harmonies, bass held notes
+Use c:50–75 for: walking bass lines, inner chord notes, detached melody phrases
+Mix both within a passage for natural breathing and phrasing
+
+### o = offset_percent (micro-timing / swing / groove)
+Omit o for straight eighth-note grid placement.
+Use o for rhythmic feel:
+  o:15–20  → subtle swing or humanization on any note
+  o:25–33  → jazz/swing feel on eighth notes
+  o:50     → full swing / triplet-feel eighths
+Add o only where you want the groove or a slight push/pull — not on every note.
+
+### Example — lyrical melody phrase:
+  Bar 5: { p:"E5", s:0, d:6 }           ← long tone, legato, no c
+          { p:"D5", s:6, d:2, c:70 }     ← passing note, slightly detached
+          { p:"C5", s:8, d:6 }           ← arrival, legato
+          { p:"B4", s:14, d:2, c:60 }    ← pickup, short
+
+### Example — walking bass:
+  { p:"A2", s:0, d:4, c:75 }
+  { p:"C3", s:4, d:4, c:75 }
+  { p:"E3", s:8, d:4, c:75 }
+  { p:"G3", s:12, d:4, c:75 }
+
 ## JSON OUTPUT FORMAT
 Return ONLY valid JSON. No markdown. No explanation. No backticks.
 
@@ -58,7 +94,7 @@ Use COMPACT note fields to save tokens:
   s = start_subdivision  (required)
   d = duration_subdivisions  (required)
   o = offset_percent  (omit if 0)
-  c = end_cutoff_percent  (omit if null)
+  c = end_cutoff_percent  (omit if null / legato)
 
 Do NOT include velocity — it is handled externally and set to 100.
 
@@ -93,5 +129,7 @@ Cross-bar notes: set d to FULL length. 3 bars = d:48. Include only in starting b
 ✓ All s values within 0 to (subdivisions_per_bar - 1)?
 ✓ No velocity field anywhere?
 ✓ bar_number written as bn?
+✓ Did I use c field to differentiate articulation (legato vs staccato)?
+✓ Did I use o field for any swing, groove, or humanization where it fits the style?
 
 Return ONLY the JSON.
