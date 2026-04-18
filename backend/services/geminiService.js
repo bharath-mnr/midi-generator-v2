@@ -81,8 +81,7 @@ async function callWithFallback(promptText, label = 'compose') {
     process.stdout.write(`${tag} ${info} Trying ${c.cyan}${modelName}${c.reset}… `)
     try {
       const model  = client.getGenerativeModel(
-        { model: modelName },
-        { apiVersion: 'v1beta' }
+        { model: modelName }
       )
       const result = await model.generateContent(promptText)
       const text   = result.response.text()
