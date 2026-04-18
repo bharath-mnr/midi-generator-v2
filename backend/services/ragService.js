@@ -1199,7 +1199,7 @@ async function embedBatch(texts, taskType = 'RETRIEVAL_DOCUMENT') {
   }
   try {
     const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model  = client.getGenerativeModel({ model: EMBED_MODEL }, { apiVersion: 'v1beta' })
+    const model  = client.getGenerativeModel({ model: EMBED_MODEL })
     const response = await model.batchEmbedContents({
       requests: texts.map(text => ({
         content:  { parts: [{ text }] },
@@ -1227,7 +1227,7 @@ async function embedText(text) {
   }
   try {
     const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
-    const model  = client.getGenerativeModel({ model: EMBED_MODEL }, { apiVersion: 'v1beta' })
+    const model  = client.getGenerativeModel({ model: EMBED_MODEL })
     const result = await model.embedContent({
       content:  { parts: [{ text }] },
       taskType: 'RETRIEVAL_QUERY',
