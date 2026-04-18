@@ -2407,8 +2407,6 @@
 
 
 
-
-
 'use strict'
 // backend/services/ragService.js
 // Pinecone-only. No localRag.json. No local fallback.
@@ -2494,14 +2492,13 @@ function onPineconeSuccess() {
 // We call embedContent once per text in parallel instead.
 async function embedOne(text, taskType) {
   const url = `${GEMINI_BASE}:embedContent?key=${process.env.GEMINI_API_KEY}`
+  // NOTE: model goes in the URL only — NOT in the request body
+  const body = { content: { parts: [{ text }] } }
+  if (taskType) body.taskType = taskType
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:    `models/${EMBED_MODEL}`,
-      content:  { parts: [{ text }] },
-      taskType,
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     const errText = await res.text()
@@ -2539,8 +2536,8 @@ async function embedText(text) {
   const res = await fetch(url, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
+    // NOTE: model goes in the URL only — NOT in the request body
     body: JSON.stringify({
-      model:    `models/${EMBED_MODEL}`,
       content:  { parts: [{ text }] },
       taskType: 'RETRIEVAL_QUERY',
     }),
