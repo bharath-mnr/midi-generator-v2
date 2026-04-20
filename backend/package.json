@@ -12,6 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/generative-ai": "^0.24.0",
+    "@libsql/client": "^0.17.2",
     "@pinecone-database/pinecone": "^2.2.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
