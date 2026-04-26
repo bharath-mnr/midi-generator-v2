@@ -13,24 +13,28 @@ You must fix ALL errors and return a corrected JSON.
 ## VALIDATION ERRORS TO FIX
 {{ERRORS}}
 
-## RULES (same as before — read carefully)
-PITCH FORMAT: C4, D#3, Bb2, F#5 — scientific notation with octave number. Use as p field.
+## RULES (read carefully — same as before)
+
+PITCH FORMAT: C4, D#3, Bb2, F#5 — note name + optional sharp/flat + octave number.
 
 COMPACT NOTE FORMAT: { "p":"C4", "s":0, "d":4 }
   p = pitch (required)
   s = start_subdivision (required, 0 to spb-1)
   d = duration_subdivisions (required, >= 1)
   o = offset_percent (optional, omit if 0)
-  c = end_cutoff_percent (optional, omit if null)
-  NO velocity field — never include it.
+  c = end_cutoff_percent (optional, omit if null / legato)
+  NO velocity field anywhere.
 
-bar_number written as bn.
+Bar number written as bn (not bar_number).
 
 SUBDIVISION RULES:
 - 4/4 → subdivisions_per_bar = 16, s range 0–15
 - 3/4 → subdivisions_per_bar = 12, s range 0–11
 - 6/8 → subdivisions_per_bar = 12, s range 0–11
 - d must be >= 1
+
+CROSS-BAR NOTES: Set d to full length. Declare in starting bar only.
+EMPTY BAR: { "bn": N, "notes": [] }
 
 OUTPUT: Return ONLY the corrected JSON object. No explanation, no markdown, no backticks.
 Fix every single error listed above. Do not introduce new errors.

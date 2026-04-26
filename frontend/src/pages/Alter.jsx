@@ -1,3 +1,5 @@
+//frontend/src/pages/Alter.jsx
+
 import { useRef, useState } from 'react'
 import { alterMidi } from '../services/api.js'
 import { Music, Upload, Download, Send } from '../components/shared/Icons.jsx'
