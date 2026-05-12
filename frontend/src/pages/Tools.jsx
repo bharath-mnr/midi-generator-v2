@@ -12,12 +12,12 @@ import Analyzer   from '../components/tools/Analyzer.jsx'
 const TABS = [
   {
     id:    'json2midi',
-    label: 'JSON → MIDI',
+    label: 'J → M',
     sub:   'Generate .mid from JSON',
   },
   {
     id:    'midi2json',
-    label: 'MIDI → JSON',
+    label: 'M → J',
     sub:   'Extract compact JSON from .mid',
   },
   {
@@ -28,7 +28,7 @@ const TABS = [
 ]
 
 export default function Tools() {
-  const [active, setActive] = useState('json2midi')
+  const [active, setActive] = useState('analyzer')
   const current = TABS.find(t => t.id === active)
 
   return (
