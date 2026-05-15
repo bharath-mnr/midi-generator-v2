@@ -3057,8 +3057,794 @@
 
 
 
+// // frontend/src/components/tools/Analyzer.jsx
+// import { useState, useRef, useCallback } from 'react'
+// import { Copy, Check, Activity } from '../shared/Icons.jsx'
+
+// const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
+// // ─── CLIENT-SIDE MIDI PARSER ─────────────────────────────────────
+// const MIDI_NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+
+// function midiConvert(buf) {
+//   const data = new Uint8Array(buf)
+//   let offset = 0
+//   const hdr = data.slice(0, 14)
+//   if (String.fromCharCode(...hdr.slice(0, 4)) !== 'MThd') throw new Error('Invalid MIDI file')
+//   const trackCount = (hdr[10] << 8) | hdr[11]
+//   const tpq        = (hdr[12] << 8) | hdr[13]
+//   offset = 14
+//   const events = []; let tempo = 120; let timeSig = { numerator: 4, denominator: 4 }
+
+//   for (let t = 0; t < trackCount; t++) {
+//     const th = data.slice(offset, offset + 8)
+//     if (String.fromCharCode(...th.slice(0, 4)) !== 'MTrk') throw new Error('Invalid track header')
+//     const tLen = (th[4] << 24) | (th[5] << 16) | (th[6] << 8) | th[7]
+//     offset += 8
+//     const td = data.slice(offset, offset + tLen)
+//     let to = 0, ct = 0, rs = 0
+//     while (to < tLen) {
+//       let dt = 0, b
+//       do { b = td[to++]; dt = (dt << 7) | (b & 0x7F) } while (b & 0x80)
+//       ct += dt
+//       let sb = td[to]; if (sb < 0x80) sb = rs; else { to++; rs = sb }
+//       if (sb === 0xFF) {
+//         const mt = td[to++]; let ml = 0, lb
+//         do { lb = td[to++]; ml = (ml << 7) | (lb & 0x7F) } while (lb & 0x80)
+//         if (mt === 0x51 && ml === 3)
+//           tempo = Math.round(60000000 / ((td[to] << 16) | (td[to+1] << 8) | td[to+2]))
+//         else if (mt === 0x58 && ml >= 4) {
+//           timeSig.numerator   = td[to]
+//           timeSig.denominator = Math.pow(2, td[to+1])
+//         }
+//         to += ml; rs = 0
+//       } else if ((sb & 0xF0) === 0x90) {
+//         const p = td[to++], v = td[to++]
+//         events.push({ tick: ct, type: v > 0 ? 'on' : 'off', pitch: p, velocity: v })
+//       } else if ((sb & 0xF0) === 0x80) {
+//         const p = td[to++]; to++
+//         events.push({ tick: ct, type: 'off', pitch: p, velocity: 0 })
+//       } else {
+//         if (sb >= 0xF0) break
+//         to += ((sb & 0xF0) === 0xC0 || (sb & 0xF0) === 0xD0) ? 1 : 2
+//       }
+//     }
+//     offset += tLen
+//   }
+
+//   events.sort((a, b) => a.tick - b.tick)
+//   const subs  = timeSig.numerator * (16 / timeSig.denominator)
+//   const tpBar = tpq * timeSig.numerator * (4 / timeSig.denominator)
+//   const tpSub = tpBar / subs
+//   const rawNotes = []; const noteOnMap = new Map()
+//   for (const ev of events) {
+//     if (ev.type === 'on') {
+//       if (noteOnMap.has(ev.pitch)) {
+//         const prev = noteOnMap.get(ev.pitch)
+//         const d = ev.tick - prev.tick
+//         if (d > 0) rawNotes.push({ pitch: ev.pitch, startTick: prev.tick, endTick: ev.tick })
+//       }
+//       noteOnMap.set(ev.pitch, ev)
+//     } else if (ev.type === 'off' && noteOnMap.has(ev.pitch)) {
+//       const on = noteOnMap.get(ev.pitch)
+//       const d  = on.tick === ev.tick ? 0 : ev.tick - on.tick
+//       if (d > 0) rawNotes.push({ pitch: ev.pitch, startTick: on.tick, endTick: ev.tick })
+//       noteOnMap.delete(ev.pitch)
+//     }
+//   }
+//   const maxTick = events.length > 0 ? Math.max(...events.map(e => e.tick)) : 0
+//   for (const [pitch, on] of noteOnMap.entries()) {
+//     const d = maxTick - on.tick
+//     if (d > 0) rawNotes.push({ pitch, startTick: on.tick, endTick: maxTick })
+//   }
+//   const jsonNotes = []
+//   for (const note of rawNotes) {
+//     const pn            = MIDI_NOTES[note.pitch % 12] + (Math.floor(note.pitch / 12) - 1)
+//     const startSubTotal = Math.floor(note.startTick / tpSub)
+//     const offsetPct     = Math.round(((note.startTick - startSubTotal * tpSub) / tpSub) * 100)
+//     const endSubTotal   = Math.floor(note.endTick / tpSub)
+//     const endPct        = Math.round(((note.endTick - endSubTotal * tpSub) / tpSub) * 100)
+//     const barNumber     = Math.floor(startSubTotal / subs) + 1
+//     const startSubInBar = startSubTotal % subs
+//     const durSubs       = endSubTotal - startSubTotal
+//     const endCutoff     = (endPct > 0 && endPct < 100) ? endPct : null
+//     const compact       = { p: pn, s: startSubInBar, d: durSubs }
+//     if (offsetPct > 0)      compact.o = offsetPct
+//     if (endCutoff !== null) compact.c = endCutoff
+//     jsonNotes.push({ bn: barNumber, ...compact })
+//   }
+//   const barsMap = new Map()
+//   for (const note of jsonNotes) {
+//     if (!barsMap.has(note.bn)) barsMap.set(note.bn, [])
+//     const { bn, ...fields } = note
+//     barsMap.get(note.bn).push(fields)
+//   }
+//   const bars = Array.from(barsMap.entries()).sort(([a],[b]) => a - b).map(([bn, notes]) => ({ bn, notes }))
+//   const filledBars = []
+//   if (bars.length > 0) {
+//     const lastBar   = bars[bars.length - 1].bn
+//     const barLookup = new Map(bars.map(b => [b.bn, b]))
+//     for (let i = 1; i <= lastBar; i++) filledBars.push(barLookup.get(i) ?? { bn: i, notes: [] })
+//   }
+//   return { tempo, time_signature: `${timeSig.numerator}/${timeSig.denominator}`, key: 'C', subdivisions_per_bar: subs, bars: filledBars }
+// }
+
+// // ─── PITCH HELPERS ────────────────────────────────────────────────
+// const NOTE_MAP = {
+//   'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'F':5,
+//   'F#':6,'GB':6,'G':7,'G#':8,'AB':8,'A':9,'A#':10,'BB':10,'B':11,
+// }
+// const MIDI_NOTES_DISP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+// function p2m(pitch) {
+//   const m = String(pitch || '').match(/^([A-G][#Bb]?)(-?\d+)$/i)
+//   if (!m) return null
+//   const pc = NOTE_MAP[m[1].toUpperCase()]
+//   return pc === undefined ? null : (parseInt(m[2]) + 1) * 12 + pc
+// }
+// function m2n(midi) { return MIDI_NOTES_DISP[midi % 12] + (Math.floor(midi / 12) - 1) }
+
+// function normNote(n) {
+//   return {
+//     pitch:                 n.pitch ?? n.p,
+//     start_subdivision:     n.start_subdivision ?? n.s ?? 0,
+//     duration_subdivisions: n.duration_subdivisions ?? n.d ?? 4,
+//   }
+// }
+
+// // ─── COLORS ──────────────────────────────────────────────────────
+// const EMP_CLR  = '#374151'
+// const UNQ_CLR  = '#6b7280'
+// const BND_CLR  = '#f97316'
+
+// // ═══════════════════════════════════════════════════════════════
+// // RESPONSE ADAPTER
+// // Normalises the engine output shape into what the UI components expect.
+// // Key differences from old shape:
+// //   - families/patterns now have occurrences with startBar/endBar (not barRange object)
+// //   - sections have patternId, fullLabel, startBar, endBar, color
+// //   - labeled bars have patternId, color (as string or {bg,text}), role
+// // ═══════════════════════════════════════════════════════════════
+
+// function colorStr(c) {
+//   if (!c) return UNQ_CLR
+//   if (typeof c === 'string') return c
+//   return c.bg || UNQ_CLR
+// }
+
+// function adaptResponse(data) {
+//   const meta       = data.metadata
+//   const rhFamilies = data.rightHand.families || data.rightHand.patterns || []
+//   const lhFamilies = data.leftHand.families  || data.leftHand.patterns  || []
+
+//   // Build color map from all families
+//   const patColorMap = new Map()
+//   patColorMap.set('EMPTY',    EMP_CLR)
+//   patColorMap.set('SURPRISE', UNQ_CLR)
+//   rhFamilies.forEach(f => patColorMap.set(f.id, colorStr(f.color)))
+//   lhFamilies.forEach(f => patColorMap.set(f.id, colorStr(f.color)))
+
+//   // Normalize a labeled bar array
+//   const normLabeled = (labeled) => (labeled || []).map(lb => {
+//     const isUnique   = lb.role === 'other' || lb.patternId === 'SURPRISE' || lb.patternId === 'FAM_OTHER'
+//     const isBndEnd   = lb.isBoundaryEnd ?? false
+//     const clr = isBndEnd ? BND_CLR
+//       : isUnique ? UNQ_CLR
+//       : colorStr(lb.color ?? patColorMap.get(lb.patternId))
+//     return {
+//       ...lb,
+//       barNumber:    lb.barNumber,
+//       noteCount:    lb.noteCount ?? (lb.notes?.length ?? 0),
+//       patternId:    lb.patternId,
+//       patternLabel: isUnique   ? 'Unique'
+//                   : lb.isEmpty ? 'Empty'
+//                   : (lb.patternLabel ?? lb.role ?? ''),
+//       isUnique,
+//       isSurprise: false,
+//       isBoundaryEnd: isBndEnd,
+//       color: clr,
+//       alternating: lb.alternating ?? null,
+//     }
+//   })
+
+//   // Normalize sections for TimelineRow legend (needs id, fullLabel, startBar, endBar, color)
+//   const normSections = (sections) => (sections || []).map(s => ({
+//     ...s,
+//     id:        s.id ?? s.patternId ?? s.pid,
+//     pid:       s.pid ?? s.id ?? s.patternId,
+//     fullLabel: s.fullLabel ?? s.label ?? s.pid ?? '?',
+//     startBar:  s.startBar,
+//     endBar:    s.endBar,
+//     color:     colorStr(s.color),
+//   }))
+
+//   // Normalize pattern families for PatternCard
+//   const normPatterns = (families) => (families || []).map(f => ({
+//     ...f,
+//     color: colorStr(f.color),
+//     windowSize: f.windowSize ?? 1,
+//     occurrences: (f.occurrences || []).map(o => ({
+//       startBar:      o.startBar ?? o.barNumber,
+//       endBar:        o.endBar   ?? o.barNumber,
+//       barRange:      o.barRange ?? `${o.startBar ?? o.barNumber}`,
+//       w:             o.w ?? f.windowSize ?? 1,
+//       variationType: o.variationType,
+//     })),
+//   }))
+
+//   const rhLabeled   = normLabeled(data.rightHand.labeled)
+//   const lhLabeled   = normLabeled(data.leftHand.labeled)
+//   const rhSections  = normSections(data.rightHand.sections)
+//   const lhSections  = normSections(data.leftHand.sections)
+//   const rhPatterns  = normPatterns(rhFamilies)
+//   const lhPatterns  = normPatterns(lhFamilies)
+
+//   // Alignment
+//   const alignment = (data.alignment || []).map(aln => {
+//     const rhLb = aln.rh
+//     const lhLb = aln.lh
+//     const normAln = (lb) => lb ? {
+//       ...lb,
+//       color: colorStr(lb.color ?? patColorMap.get(lb.patternId)),
+//       patternLabel: (lb.role === 'other' || lb.patternId === 'SURPRISE')
+//         ? 'Unique' : (lb.patternLabel ?? lb.role ?? ''),
+//     } : null
+//     return { ...aln, rh: normAln(rhLb), lh: normAln(lhLb) }
+//   })
+
+//   const res = {
+//     rhPatterns,
+//     lhPatterns,
+//     rhLabeled,
+//     lhLabeled,
+//     rhSections,
+//     lhSections,
+//     rhGraph:     data.rightHand.graph,
+//     alignment,
+//     split:       data.splitMidi,
+//     boundaries:  data.rightHand.boundaries || [],
+//     windowSizes: data.summary?.windowSizes || [2, 8],
+//     uniqueBars:  data.summary?.surpriseBars || [],
+//   }
+//   return { meta, res, yaml: data.yamlBlueprint }
+// }
+
+// // ═══════════════════════════════════════════════════════════════
+// // UI COMPONENTS
+// // ═══════════════════════════════════════════════════════════════
+
+// function TimelineRow({ labeled, sections, title }) {
+//   const [hov, setHov] = useState(null)
+//   if (!labeled || !labeled.some(b => !b.isEmpty)) return null
+
+//   const secMap = new Map((sections || []).map(s => [s.pid ?? s.id, s]))
+//   const ROW = 16
+//   const rows = []
+//   for (let i = 0; i < labeled.length; i += ROW) rows.push(labeled.slice(i, i + ROW))
+
+//   function cellBg(lb) {
+//     if (lb.isEmpty)       return EMP_CLR
+//     if (lb.isBoundaryEnd) return BND_CLR
+//     if (lb.isUnique)      return UNQ_CLR
+//     return lb.color || UNQ_CLR
+//   }
+
+//   const hasUnique   = labeled.some(b => b.isUnique)
+//   const hasBoundary = labeled.some(b => b.isBoundaryEnd)
+
+//   return (
+//     <div>
+//       <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase', marginBottom:8 }}>{title}</div>
+
+//       {/* Section legend */}
+//       <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:10 }}>
+//         {(sections || []).map(sec => (
+//           <div key={sec.id ?? sec.pid} style={{ display:'flex', alignItems:'center', gap:5, padding:'2px 8px', borderRadius:5, background:colorStr(sec.color)+'18', border:`1px solid ${colorStr(sec.color)}44`, fontSize:10, fontFamily:'var(--mono)' }}>
+//             <span style={{ width:8, height:8, borderRadius:2, background:colorStr(sec.color), display:'inline-block' }} />
+//             <span style={{ color:colorStr(sec.color), fontWeight:600 }}>{sec.fullLabel}</span>
+//             <span style={{ color:'var(--tx-3)' }}>{sec.startBar}–{sec.endBar}</span>
+//           </div>
+//         ))}
+//         {hasUnique && (
+//           <div style={{ display:'flex', alignItems:'center', gap:5, padding:'2px 8px', borderRadius:5, background:UNQ_CLR+'18', border:`1px solid ${UNQ_CLR}44`, fontSize:10, fontFamily:'var(--mono)' }}>
+//             <span style={{ width:8, height:8, borderRadius:2, background:UNQ_CLR, display:'inline-block' }} />
+//             <span style={{ color:UNQ_CLR, fontWeight:600 }}>Unique</span>
+//           </div>
+//         )}
+//         {hasBoundary && (
+//           <div style={{ display:'flex', alignItems:'center', gap:5, padding:'2px 8px', borderRadius:5, background:BND_CLR+'18', border:`1px solid ${BND_CLR}44`, fontSize:10, fontFamily:'var(--mono)' }}>
+//             <span style={{ width:8, height:8, borderRadius:2, background:BND_CLR, display:'inline-block' }} />
+//             <span style={{ color:BND_CLR, fontWeight:600 }}>Boundary</span>
+//           </div>
+//         )}
+//       </div>
+
+//       {rows.map((row, ri) => (
+//         <div key={ri} style={{ display:'flex', alignItems:'center', gap:3, marginBottom:2 }}>
+//           <span style={{ fontSize:9, fontFamily:'var(--mono)', color:'var(--tx-3)', width:20, textAlign:'right', flexShrink:0 }}>{row[0].barNumber}</span>
+//           <div style={{ display:'flex', gap:1, flex:1 }}>
+//             {row.map(lb => (
+//               <div key={lb.barNumber}
+//                 onMouseEnter={() => setHov(lb)}
+//                 onMouseLeave={() => setHov(null)}
+//                 style={{
+//                   flex:1, height:22, borderRadius:2,
+//                   background: cellBg(lb),
+//                   opacity: lb.isEmpty ? 0.15 : lb.isUnique ? 0.55 : 1,
+//                   cursor:'default',
+//                   outline: hov?.barNumber === lb.barNumber ? '2px solid var(--tx-1)' : 'none',
+//                   position:'relative', transition:'outline 0.08s',
+//                 }}>
+//                 {lb.isSustain    && <div style={{ position:'absolute', inset:'40% 0', height:2, background:'rgba(255,255,255,0.6)', borderRadius:1 }} />}
+//                 {lb.alternating  && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', gap:1 }}>{[0,1,2].map(i => <div key={i} style={{ width:1, height:'55%', background:'rgba(255,255,255,0.45)', borderRadius:1 }} />)}</div>}
+//                 {lb.isBoundaryEnd && <div style={{ position:'absolute', right:0, top:0, bottom:0, width:2, background:'rgba(255,255,255,0.8)', borderRadius:1 }} />}
+//               </div>
+//             ))}
+//           </div>
+//         </div>
+//       ))}
+
+//       {hov && (
+//         <div style={{ marginTop:8, padding:'8px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', fontSize:11, fontFamily:'var(--mono)', color:'var(--text2)' }}>
+//           <span style={{ color:'var(--tx-1)', fontWeight:600 }}>Bar {hov.barNumber}</span>{' · '}
+//           <span style={{ color: hov.isBoundaryEnd ? BND_CLR : hov.isUnique ? UNQ_CLR : hov.isEmpty ? 'var(--tx-3)' : hov.color }}>
+//             {hov.patternLabel}
+//           </span>
+//           {' · '}{hov.noteCount} notes
+//           {hov.role          && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>role:{hov.role}</span>}
+//           {hov.variationType && <span style={{ color:'var(--mint)', marginLeft:8 }}>var:{hov.variationType}</span>}
+//           {hov.pedalPitch    && <span style={{ color:'var(--accent)', marginLeft:8 }}>pedal:{hov.pedalPitch}</span>}
+//           {hov.melodyDirection && <span style={{ color:'var(--sky)', marginLeft:8 }}>dir:{hov.melodyDirection}</span>}
+//           {hov.sectionLabel  && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>sec:{hov.sectionLabel}</span>}
+//           {hov.isUnique      && <span style={{ color:UNQ_CLR, marginLeft:8 }}>appears once</span>}
+//           {hov.isBoundaryEnd && <span style={{ color:BND_CLR, marginLeft:8 }}>boundary</span>}
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+
+// function PatternCard({ pat, meta, spb }) {
+//   // Get first occurrence bar number
+//   const firstOcc  = pat.occurrences[0]
+//   const firstBarN = firstOcc?.startBar ?? firstOcc?.barNumber
+//   const bar = meta.bars.find(b => (b.bar_number ?? b.bn) === firstBarN)
+//   const notes = bar ? [...bar.notes].map(normNote).sort((a, b) => a.start_subdivision - b.start_subdivision) : []
+//   const allMidis = notes.map(n => p2m(n.pitch)).filter(x => x !== null)
+//   const minM = allMidis.length ? Math.min(...allMidis) : 60
+//   const maxM = allMidis.length ? Math.max(...allMidis) : 72
+//   const range = Math.max(maxM - minM, 8)
+//   const color = colorStr(pat.color)
+//   return (
+//     <div style={{ border:`1px solid ${color}33`, borderRadius:'var(--radius)', overflow:'hidden', background:`${color}0d` }}>
+//       <div style={{ padding:'10px 14px', display:'flex', alignItems:'center', justifyContent:'space-between', background:color+'1a' }}>
+//         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+//           <span style={{ width:10, height:10, borderRadius:'50%', background:color, display:'inline-block' }} />
+//           <span style={{ fontWeight:700, color:'var(--tx-1)', fontSize:13 }}>{pat.label}</span>
+//           <span style={{ fontSize:9, fontFamily:'var(--mono)', padding:'1px 6px', borderRadius:3, background:color+'28', color }}>{pat.matchLevel ?? pat.type}</span>
+//         </div>
+//         <span style={{ fontSize:10, color:'var(--tx-3)', fontFamily:'var(--mono)' }}>{pat.occurrences.length}× · {pat.windowSize}bar</span>
+//       </div>
+//       <div style={{ padding:'10px 14px' }}>
+//         <div style={{ height:52, background:'var(--surface2)', borderRadius:'var(--radius-sm)', marginBottom:10, position:'relative', overflow:'hidden', border:'1px solid var(--border)' }}>
+//           {notes.slice(0, 24).map((n, i) => {
+//             const mn = p2m(n.pitch); if (mn === null) return null
+//             const y = ((maxM - mn) / range) * 88
+//             const x = (n.start_subdivision / spb) * 100
+//             const w = Math.max((n.duration_subdivisions / spb) * 100, 2)
+//             return <div key={i} style={{ position:'absolute', left:`${x}%`, top:`${y}%`, width:`${w}%`, height:'10%', minHeight:3, background:color, borderRadius:1, opacity:0.9 }} />
+//           })}
+//         </div>
+//         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6, fontSize:10, fontFamily:'var(--mono)' }}>
+//           <div style={{ background:'var(--surface2)', borderRadius:'var(--radius-sm)', padding:'6px 8px', border:'1px solid var(--border)' }}>
+//             <div style={{ color:'var(--tx-3)', marginBottom:2 }}>Bars</div>
+//             <div style={{ color:'var(--tx-1)', fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+//               {pat.occurrences.map(o => o.startBar ?? o.barNumber).join(', ')}
+//             </div>
+//           </div>
+//           <div style={{ background:'var(--surface2)', borderRadius:'var(--radius-sm)', padding:'6px 8px', border:'1px solid var(--border)' }}>
+//             <div style={{ color:'var(--tx-3)', marginBottom:2 }}>Variations</div>
+//             <div style={{ color:'var(--tx-1)' }}>
+//               {[...new Set(pat.occurrences.map(o => o.variationType).filter(Boolean))].slice(0,2).join(', ') || '—'}
+//             </div>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   )
+// }
+
+// function GraphView({ graph }) {
+//   const { nodes, edges } = graph || { nodes: [], edges: [] }
+//   if (!nodes.length) return <div style={{ color:'var(--tx-3)', fontSize:12, fontFamily:'var(--mono)' }}>No transitions detected</div>
+
+//   const maxW   = Math.max(...edges.map(e => e.weight), 1)
+//   const W      = 520
+//   const H      = Math.max(300, nodes.length * 55)
+//   const cx     = W / 2, cy = H / 2
+//   const r      = Math.min(cx - 52, cy - 52, 120)
+//   const NODE_R = 20
+//   const pos    = {}
+//   nodes.forEach((nd, i) => {
+//     const a = (i / nodes.length) * Math.PI * 2 - Math.PI / 2
+//     pos[nd.id] = { x: Math.round(cx + r * Math.cos(a)), y: Math.round(cy + r * Math.sin(a)) }
+//   })
+
+//   return (
+//     <div>
+//       <div style={{ background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden', marginBottom:12 }}>
+//         <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display:'block' }}>
+//           <defs>
+//             <marker id="ar" markerWidth="6" markerHeight="6" refX="7" refY="3" orient="auto">
+//               <path d="M1 1L6 3L1 5" fill="none" stroke="context-stroke" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+//             </marker>
+//           </defs>
+//           {edges.slice(0, 20).map((e, i) => {
+//             const f = pos[e.from], t = pos[e.to]; if (!f || !t) return null
+//             const dx = t.x - f.x, dy = t.y - f.y
+//             const dist = Math.sqrt(dx * dx + dy * dy) || 1
+//             const fx = f.x + (dx / dist) * NODE_R, fy = f.y + (dy / dist) * NODE_R
+//             const tx = t.x - (dx / dist) * (NODE_R + 4), ty = t.y - (dy / dist) * (NODE_R + 4)
+//             const qx = (f.x + t.x) / 2 - dy * 0.15, qy = (f.y + t.y) / 2 + dx * 0.15
+//             const sw = Math.max(0.8, (e.weight / maxW) * 3)
+//             const op = 0.3 + 0.6 * (e.weight / maxW)
+//             const nd = nodes.find(n => n.id === e.from)
+//             const clr = colorStr(nd?.color) || '#4b5563'
+//             return <path key={i} d={`M${fx},${fy} Q${qx},${qy} ${tx},${ty}`} fill="none" stroke={clr} strokeWidth={sw} strokeOpacity={op} markerEnd="url(#ar)" />
+//           })}
+//           {nodes.map(nd => {
+//             const p = pos[nd.id]; if (!p) return null
+//             const nr  = Math.max(NODE_R, Math.min(28, NODE_R + nd.count * 0.8))
+//             const clr = colorStr(nd.color) || '#6b7280'
+//             return (
+//               <g key={nd.id}>
+//                 <circle cx={p.x} cy={p.y} r={nr} fill={clr} fillOpacity={0.15} stroke={clr} strokeWidth={1.5} />
+//                 <text x={p.x} y={p.y - 3} textAnchor="middle" dominantBaseline="central" fill="#e2e8f0" fontSize="11" fontWeight="600" fontFamily="monospace">{nd.id}</text>
+//                 <text x={p.x} y={p.y + 10} textAnchor="middle" dominantBaseline="central" fill="#94a3b8" fontSize="9" fontFamily="monospace">{nd.count}b</text>
+//               </g>
+//             )
+//           })}
+//         </svg>
+//       </div>
+//       <div style={{ display:'flex', flexDirection:'column', gap:5, fontSize:11, fontFamily:'var(--mono)' }}>
+//         {edges.slice(0, 8).map((e, i) => {
+//           const fnd = nodes.find(n => n.id === e.from), tnd = nodes.find(n => n.id === e.to)
+//           const fc = colorStr(fnd?.color) || 'var(--tx-2)'
+//           const tc = colorStr(tnd?.color) || 'var(--tx-2)'
+//           const pct = Math.round((e.weight / maxW) * 100)
+//           return (
+//             <div key={i} style={{ display:'grid', gridTemplateColumns:'80px 12px 80px 1fr 28px', alignItems:'center', gap:8 }}>
+//               <span style={{ color: fc, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.from}</span>
+//               <span style={{ color:'var(--tx-3)' }}>→</span>
+//               <span style={{ color: tc, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{e.to}</span>
+//               <div style={{ height:3, background:'var(--surface3)', borderRadius:2, overflow:'hidden' }}>
+//                 <div style={{ height:'100%', borderRadius:2, background:fc, width:`${pct}%` }} />
+//               </div>
+//               <span style={{ color:'var(--tx-3)', textAlign:'right' }}>{e.weight}</span>
+//             </div>
+//           )
+//         })}
+//       </div>
+//     </div>
+//   )
+// }
+
+// function HandTable({ alignment }) {
+//   const [page, setPage] = useState(0)
+//   const PG    = 20
+//   const total = Math.ceil((alignment || []).length / PG)
+//   const slice = (alignment || []).slice(page * PG, (page + 1) * PG)
+//   return (
+//     <div>
+//       <div style={{ display:'grid', gridTemplateColumns:'2rem 1fr 1fr', gap:4, marginBottom:6 }}>
+//         {['Bar','Right hand','Left hand'].map(h => <span key={h} style={{ fontSize:10, color:'var(--tx-3)', fontFamily:'var(--mono)' }}>{h}</span>)}
+//       </div>
+//       <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+//         {slice.map(aln => {
+//           const rhC = colorStr(aln.rh?.color) || EMP_CLR
+//           const lhC = colorStr(aln.lh?.color) || EMP_CLR
+//           return (
+//             <div key={aln.barNumber} style={{ display:'grid', gridTemplateColumns:'2rem 1fr 1fr', gap:4, alignItems:'center' }}>
+//               <span style={{ fontSize:10, color:'var(--tx-3)', fontFamily:'var(--mono)', textAlign:'right' }}>{aln.barNumber}</span>
+//               <div style={{ padding:'3px 8px', borderRadius:4, fontSize:10, fontFamily:'var(--mono)', background:rhC+'22', color:rhC, border:`1px solid ${rhC}33`, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+//                 {aln.rh?.patternLabel || '—'}{aln.rh?.alternating && ' ⟳'}{aln.rh?.variationType ? ` (${aln.rh.variationType})` : ''}
+//               </div>
+//               <div style={{ padding:'3px 8px', borderRadius:4, fontSize:10, fontFamily:'var(--mono)', background:lhC+'22', color:lhC, border:`1px solid ${lhC}33`, overflow:'hidden', whiteSpace:'nowrap', textOverflow:'ellipsis' }}>
+//                 {aln.lh?.patternLabel || '—'}{aln.lh?.alternating && ' ⟳'}
+//               </div>
+//             </div>
+//           )
+//         })}
+//       </div>
+//       {total > 1 && (
+//         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginTop:10 }}>
+//           <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} style={{ padding:'3px 10px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'none', color:'var(--tx-2)', cursor:page===0?'not-allowed':'pointer', opacity:page===0?0.4:1, fontSize:11, fontFamily:'var(--mono)' }}>←</button>
+//           <span style={{ fontSize:10, fontFamily:'var(--mono)', color:'var(--tx-3)' }}>{page + 1} / {total}</span>
+//           <button onClick={() => setPage(p => Math.min(total - 1, p + 1))} disabled={page === total - 1} style={{ padding:'3px 10px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'none', color:'var(--tx-2)', cursor:page===total-1?'not-allowed':'pointer', opacity:page===total-1?0.4:1, fontSize:11, fontFamily:'var(--mono)' }}>→</button>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+
+// function YamlPanel({ yaml }) {
+//   const [copied, setCopied] = useState(false)
+//   const copy = () => { navigator.clipboard.writeText(yaml).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }
+//   return (
+//     <div>
+//       <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+//         <button onClick={copy} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'none', color: copied?'var(--accent)':'var(--tx-2)', cursor:'pointer', fontSize:11, fontWeight:600, transition:'all 0.15s' }}>
+//           {copied ? <Check size={11} stroke="var(--accent)" /> : <Copy size={11} />}
+//           {copied ? 'Copied!' : 'Copy YAML'}
+//         </button>
+//       </div>
+//       <textarea readOnly value={yaml} style={{ width:'100%', minHeight:320, background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', padding:12, color:'var(--accent)', fontFamily:'var(--mono)', fontSize:11, resize:'vertical', outline:'none', lineHeight:1.7 }} />
+//     </div>
+//   )
+// }
+
+// function BoundariesPanel({ boundaries, windowSizes }) {
+//   if (!boundaries || boundaries.length === 0)
+//     return <div style={{ color:'var(--tx-3)', fontSize:12, fontFamily:'var(--mono)' }}>No boundaries detected</div>
+//   return (
+//     <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+//       <div style={{ fontSize:10, fontFamily:'var(--mono)', color:'var(--tx-3)', marginBottom:4 }}>Natural window sizes: [{windowSizes.join(', ')}]</div>
+//       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:8 }}>
+//         {boundaries.map((b, i) => (
+//           <div key={i} style={{ padding:'8px 12px', borderRadius:'var(--radius-sm)', border:`1px solid ${BND_CLR}44`, background:BND_CLR+'0d', fontSize:11, fontFamily:'var(--mono)' }}>
+//             <div style={{ color:BND_CLR, fontWeight:600, marginBottom:4 }}>After bar {b.afterBarNumber} — {b.type}</div>
+//             <div style={{ color:'var(--tx-3)', fontSize:10 }}>novelty: {b.noveltyScore?.toFixed(3)}</div>
+//             {b.dims && (
+//               <div style={{ marginTop:4, display:'flex', gap:4, flexWrap:'wrap' }}>
+//                 {Object.entries(b.dims).map(([dim, val]) => (
+//                   <span key={dim} style={{ fontSize:9, padding:'1px 5px', borderRadius:3, background:'var(--surface3)', color:'var(--tx-2)' }}>{dim}:{(+val).toFixed(2)}</span>
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   )
+// }
+
+// // ═══════════════════════════════════════════════════════════════
+// // DUAL FILE DROP ZONES
+// // ═══════════════════════════════════════════════════════════════
+
+// function FileDropZone({ label, onFile, accept, disabled, busy }) {
+//   const [dragging, setDragging] = useState(false)
+//   const inputRef = useRef(null)
+
+//   const handleDrag = e => { e.preventDefault(); setDragging(true) }
+//   const handleLeave = () => setDragging(false)
+//   const handleDrop = e => {
+//     e.preventDefault(); setDragging(false)
+//     const f = e.dataTransfer.files[0]; if (f) onFile(f)
+//   }
+//   const handleInput = e => {
+//     const f = e.target.files[0]; if (f) onFile(f)
+//     e.target.value = ''
+//   }
+
+//   return (
+//     <div
+//       onDragOver={handleDrag}
+//       onDragEnter={handleDrag}
+//       onDragLeave={handleLeave}
+//       onDrop={handleDrop}
+//       onClick={() => !disabled && !busy && inputRef.current?.click()}
+//       style={{
+//         border: `2px dashed ${dragging ? 'var(--accent)' : 'var(--border)'}`,
+//         borderRadius: 'var(--radius)',
+//         padding: '1.5rem 1rem',
+//         textAlign: 'center',
+//         cursor: (disabled || busy) ? 'not-allowed' : 'pointer',
+//         background: dragging ? 'rgba(var(--accent-rgb, 99,102,241),0.05)' : 'var(--surface2)',
+//         transition: 'border-color 0.15s, background 0.15s',
+//         userSelect: 'none',
+//         opacity: disabled ? 0.5 : 1,
+//       }}>
+//       <input ref={inputRef} type="file" accept={accept} style={{ display:'none' }} onChange={handleInput} disabled={disabled} />
+//       <div style={{ fontSize: 24, marginBottom: 8, opacity: busy ? 0.4 : 1 }}>♩</div>
+//       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx-1)', marginBottom: 4 }}>{label}</div>
+//       <div style={{ fontSize: 10, color: 'var(--tx-3)', fontFamily: 'var(--mono)' }}>
+//         {disabled ? 'Auto‑split from full track' : 'Drop or click'}
+//       </div>
+//     </div>
+//   )
+// }
+
+// // ═══════════════════════════════════════════════════════════════
+// // MAIN COMPONENT
+// // ═══════════════════════════════════════════════════════════════
+
+// const INNER_TABS = ['Timeline', 'Patterns', 'Graph', 'Hands', 'Boundaries', 'YAML']
+
+// export default function Analyzer() {
+//   const [rhFile, setRhFile] = useState(null)
+//   const [lhFile, setLhFile] = useState(null)
+//   const [result, setResult] = useState(null)
+//   const [busy, setBusy] = useState(false)
+//   const [error, setError] = useState(null)
+//   const [inner, setInner] = useState('Timeline')
+
+//   const clear = () => { setRhFile(null); setLhFile(null); setResult(null); setError(null) }
+
+//   const parseFile = async (file) => {
+//     if (/\.(mid|midi)$/i.test(file.name)) {
+//       const buf = await file.arrayBuffer()
+//       return midiConvert(buf)
+//     } else {
+//       const text = await file.text()
+//       return JSON.parse(text)
+//     }
+//   }
+
+//   const runAnalysis = async () => {
+//     if (!rhFile) { setError('Please select a right hand (or full track) file.'); return }
+//     setBusy(true); setError(null)
+//     try {
+//       let innerPayload = lhFile
+//         ? { rh: rhFile.json, lh: lhFile.json }
+//         : { full: rhFile.json }
+//       const payload = { json: innerPayload }
+//       const response = await fetch(`${BASE}/api/analyze`, {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(payload),
+//       })
+//       if (!response.ok) {
+//         let msg = `${response.status} ${response.statusText}`
+//         try { const b = await response.json(); msg = b.error || msg } catch (_) {}
+//         throw new Error(msg)
+//       }
+//       const { success, data, error: apiErr } = await response.json()
+//       if (!success || apiErr) throw new Error(apiErr || 'Analysis failed')
+//       setResult(adaptResponse(data))
+//       setInner('Timeline')
+//     } catch (err) {
+//       setError(err.message || 'Analysis failed')
+//     } finally {
+//       setBusy(false)
+//     }
+//   }
+
+//   const handleRhFile = async (file) => {
+//     try { const json = await parseFile(file); setRhFile({ name: file.name, json }); setResult(null); setError(null) }
+//     catch (err) { setError(`Failed to parse right hand file: ${err.message}`) }
+//   }
+//   const handleLhFile = async (file) => {
+//     try { const json = await parseFile(file); setLhFile({ name: file.name, json }); setResult(null); setError(null) }
+//     catch (err) { setError(`Failed to parse left hand file: ${err.message}`) }
+//   }
+
+//   const { meta, res, yaml } = result || {}
+
+//   return (
+//     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+//       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+//         <div style={{ flex: 1 }}>
+//           <FileDropZone
+//             label={lhFile ? "Right Hand (higher register)" : "Right Hand / Full Track"}
+//             onFile={handleRhFile} accept=".mid,.midi,.json" disabled={false} busy={busy}
+//           />
+//           {rhFile && <div style={{ fontSize:11, marginTop:6, color:'var(--accent)', fontFamily:'var(--mono)' }}>✓ {rhFile.name}</div>}
+//         </div>
+//         <div style={{ flex: 1 }}>
+//           <FileDropZone
+//             label="Left Hand (optional, lower register)"
+//             onFile={handleLhFile} accept=".mid,.midi,.json" disabled={false} busy={busy}
+//           />
+//           {lhFile && <div style={{ fontSize:11, marginTop:6, color:'var(--accent)', fontFamily:'var(--mono)' }}>✓ {lhFile.name}</div>}
+//         </div>
+//       </div>
+
+//       {rhFile && (
+//         <div style={{ display:'flex', justifyContent:'center', marginTop:8 }}>
+//           <button onClick={runAnalysis} disabled={busy} style={{ padding:'8px 24px', borderRadius:'var(--radius-sm)', background:'var(--accent)', color:'white', border:'none', fontWeight:600, cursor:busy?'not-allowed':'pointer', opacity:busy?0.6:1, fontSize:13 }}>
+//             {busy ? 'Analyzing...' : 'Analyze'}
+//           </button>
+//         </div>
+//       )}
+
+//       {result && (
+//         <div style={{ display:'flex', justifyContent:'flex-end' }}>
+//           <button onClick={clear} style={{ padding:'4px 12px', background:'none', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', color:'var(--tx-3)', fontSize:11, cursor:'pointer' }}>
+//             Clear all
+//           </button>
+//         </div>
+//       )}
+
+//       {error && (
+//         <div style={{ fontSize:12, color:'var(--rose)', background:'rgba(245,85,74,0.07)', border:'1px solid rgba(245,85,74,0.2)', borderRadius:'var(--radius-sm)', padding:'8px 12px', fontFamily:'var(--mono)' }}>
+//           {error}
+//         </div>
+//       )}
+
+//       {result && (
+//         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+//           {/* Summary chips */}
+//           <div style={{ display:'flex', flexWrap:'wrap', gap:8, padding:'10px 14px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', fontSize:11, fontFamily:'var(--mono)' }}>
+//             {[
+//               [`${meta.bars.length} bars`,              'var(--tx-2)'],
+//               [`${res.rhPatterns.length} RH patterns`,  'var(--accent)'],
+//               [`${res.lhPatterns.length} LH patterns`,  'var(--sky)'],
+//               [`${res.rhSections.length} sections`,     'var(--mint)'],
+//               [`${res.boundaries.length} boundaries`,   '#f97316'],
+//               [`windows [${res.windowSizes.join(',')}]`,'var(--tx-3)'],
+//               ...(res.uniqueBars.length > 0 ? [[`${res.uniqueBars.length} unique`, 'var(--tx-3)']] : []),
+//               ...(res.split != null ? [[`split ${m2n(res.split)}`, 'var(--tx-3)']] : []),
+//             ].map(([label, color]) => (
+//               <span key={label} style={{ color, padding:'1px 7px', borderRadius:4, background:'var(--surface3)', border:'1px solid var(--border)' }}>{label}</span>
+//             ))}
+//           </div>
+
+//           {/* Tabs */}
+//           <div style={{ display:'flex', gap:2, flexWrap:'wrap' }}>
+//             {INNER_TABS.map(t => (
+//               <button key={t} onClick={() => setInner(t)} style={{ padding:'4px 12px', borderRadius:'var(--radius-sm)', border: inner===t ? '1px solid var(--border2)' : '1px solid transparent', background: inner===t ? 'var(--surface2)' : 'transparent', color: inner===t ? 'var(--tx-1)' : 'var(--tx-3)', fontSize:11, fontWeight: inner===t ? 600 : 400, cursor:'pointer', fontFamily:'var(--mono)' }}>
+//                 {t}
+//               </button>
+//             ))}
+//           </div>
+
+//           {/* Tab panels */}
+//           <div>
+//             {inner === 'Timeline' && (
+//               <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+//                 <TimelineRow labeled={res.rhLabeled} sections={res.rhSections} title="Right hand" />
+//                 <TimelineRow labeled={res.lhLabeled} sections={res.lhSections} title="Left hand" />
+//               </div>
+//             )}
+//             {inner === 'Patterns' && (
+//               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+//                 {res.rhPatterns.length > 0 && (
+//                   <>
+//                     <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase' }}>Right hand — {res.rhPatterns.length} pattern families</div>
+//                     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
+//                       {res.rhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
+//                     </div>
+//                   </>
+//                 )}
+//                 {res.lhPatterns.length > 0 && (
+//                   <>
+//                     <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase', marginTop:8 }}>Left hand — {res.lhPatterns.length} pattern families</div>
+//                     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
+//                       {res.lhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
+//                     </div>
+//                   </>
+//                 )}
+//                 {res.rhPatterns.length === 0 && res.lhPatterns.length === 0 && (
+//                   <div style={{ color:'var(--tx-3)', fontSize:12, fontFamily:'var(--mono)' }}>No repeating patterns detected</div>
+//                 )}
+//               </div>
+//             )}
+//             {inner === 'Graph'      && <GraphView graph={res.rhGraph} />}
+//             {inner === 'Hands'      && <HandTable alignment={res.alignment} />}
+//             {inner === 'Boundaries' && <BoundariesPanel boundaries={res.boundaries} windowSizes={res.windowSizes} />}
+//             {inner === 'YAML'       && <YamlPanel yaml={yaml} />}
+//           </div>
+//         </div>
+//       )}
+//     </div>
+//   )
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
 // frontend/src/components/tools/Analyzer.jsx
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Copy, Check, Activity } from '../shared/Icons.jsx'
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
@@ -3198,11 +3984,6 @@ const BND_CLR  = '#f97316'
 
 // ═══════════════════════════════════════════════════════════════
 // RESPONSE ADAPTER
-// Normalises the engine output shape into what the UI components expect.
-// Key differences from old shape:
-//   - families/patterns now have occurrences with startBar/endBar (not barRange object)
-//   - sections have patternId, fullLabel, startBar, endBar, color
-//   - labeled bars have patternId, color (as string or {bg,text}), role
 // ═══════════════════════════════════════════════════════════════
 
 function colorStr(c) {
@@ -3216,14 +3997,12 @@ function adaptResponse(data) {
   const rhFamilies = data.rightHand.families || data.rightHand.patterns || []
   const lhFamilies = data.leftHand.families  || data.leftHand.patterns  || []
 
-  // Build color map from all families
   const patColorMap = new Map()
   patColorMap.set('EMPTY',    EMP_CLR)
   patColorMap.set('SURPRISE', UNQ_CLR)
   rhFamilies.forEach(f => patColorMap.set(f.id, colorStr(f.color)))
   lhFamilies.forEach(f => patColorMap.set(f.id, colorStr(f.color)))
 
-  // Normalize a labeled bar array
   const normLabeled = (labeled) => (labeled || []).map(lb => {
     const isUnique   = lb.role === 'other' || lb.patternId === 'SURPRISE' || lb.patternId === 'FAM_OTHER'
     const isBndEnd   = lb.isBoundaryEnd ?? false
@@ -3246,7 +4025,6 @@ function adaptResponse(data) {
     }
   })
 
-  // Normalize sections for TimelineRow legend (needs id, fullLabel, startBar, endBar, color)
   const normSections = (sections) => (sections || []).map(s => ({
     ...s,
     id:        s.id ?? s.patternId ?? s.pid,
@@ -3257,7 +4035,6 @@ function adaptResponse(data) {
     color:     colorStr(s.color),
   }))
 
-  // Normalize pattern families for PatternCard
   const normPatterns = (families) => (families || []).map(f => ({
     ...f,
     color: colorStr(f.color),
@@ -3278,17 +4055,14 @@ function adaptResponse(data) {
   const rhPatterns  = normPatterns(rhFamilies)
   const lhPatterns  = normPatterns(lhFamilies)
 
-  // Alignment
   const alignment = (data.alignment || []).map(aln => {
-    const rhLb = aln.rh
-    const lhLb = aln.lh
     const normAln = (lb) => lb ? {
       ...lb,
       color: colorStr(lb.color ?? patColorMap.get(lb.patternId)),
       patternLabel: (lb.role === 'other' || lb.patternId === 'SURPRISE')
         ? 'Unique' : (lb.patternLabel ?? lb.role ?? ''),
     } : null
-    return { ...aln, rh: normAln(rhLb), lh: normAln(lhLb) }
+    return { ...aln, rh: normAln(aln.rh), lh: normAln(aln.lh) }
   })
 
   const res = {
@@ -3309,14 +4083,32 @@ function adaptResponse(data) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// UI COMPONENTS
+// STABLE TOOLTIP — renders outside the cell grid, no re-render flicker
 // ═══════════════════════════════════════════════════════════════
 
 function TimelineRow({ labeled, sections, title }) {
-  const [hov, setHov] = useState(null)
+  // Use a ref for the hovered bar to avoid re-rendering the entire cell grid
+  const [hovBar, setHovBar] = useState(null)
+  const hovTimerRef = useRef(null)
+
+  // Debounced setter — only update state after pointer settles 40ms
+  // This kills the flicker caused by rapid enter/leave between adjacent cells
+  const onEnter = useCallback((lb) => {
+    if (hovTimerRef.current) clearTimeout(hovTimerRef.current)
+    hovTimerRef.current = setTimeout(() => setHovBar(lb), 40)
+  }, [])
+
+  const onLeave = useCallback(() => {
+    if (hovTimerRef.current) clearTimeout(hovTimerRef.current)
+    hovTimerRef.current = setTimeout(() => setHovBar(null), 80)
+  }, [])
+
+  useEffect(() => () => {
+    if (hovTimerRef.current) clearTimeout(hovTimerRef.current)
+  }, [])
+
   if (!labeled || !labeled.some(b => !b.isEmpty)) return null
 
-  const secMap = new Map((sections || []).map(s => [s.pid ?? s.id, s]))
   const ROW = 16
   const rows = []
   for (let i = 0; i < labeled.length; i += ROW) rows.push(labeled.slice(i, i + ROW))
@@ -3358,21 +4150,31 @@ function TimelineRow({ labeled, sections, title }) {
         )}
       </div>
 
+      {/* Cell grid — pointer-events only, no state changes inside map */}
       {rows.map((row, ri) => (
         <div key={ri} style={{ display:'flex', alignItems:'center', gap:3, marginBottom:2 }}>
           <span style={{ fontSize:9, fontFamily:'var(--mono)', color:'var(--tx-3)', width:20, textAlign:'right', flexShrink:0 }}>{row[0].barNumber}</span>
           <div style={{ display:'flex', gap:1, flex:1 }}>
             {row.map(lb => (
-              <div key={lb.barNumber}
-                onMouseEnter={() => setHov(lb)}
-                onMouseLeave={() => setHov(null)}
+              <div
+                key={lb.barNumber}
+                onMouseEnter={() => onEnter(lb)}
+                onMouseLeave={onLeave}
                 style={{
-                  flex:1, height:22, borderRadius:2,
+                  flex:1,
+                  height:22,
+                  borderRadius:2,
                   background: cellBg(lb),
                   opacity: lb.isEmpty ? 0.15 : lb.isUnique ? 0.55 : 1,
-                  cursor:'default',
-                  outline: hov?.barNumber === lb.barNumber ? '2px solid var(--tx-1)' : 'none',
-                  position:'relative', transition:'outline 0.08s',
+                  cursor: 'default',
+                  // Use box-shadow instead of outline — outline causes reflow/flicker
+                  boxShadow: hovBar?.barNumber === lb.barNumber
+                    ? 'inset 0 0 0 2px rgba(255,255,255,0.75)'
+                    : 'none',
+                  position: 'relative',
+                  // will-change tells the browser to composite this layer separately
+                  willChange: 'box-shadow',
+                  transition: 'box-shadow 0.06s ease',
                 }}>
                 {lb.isSustain    && <div style={{ position:'absolute', inset:'40% 0', height:2, background:'rgba(255,255,255,0.6)', borderRadius:1 }} />}
                 {lb.alternating  && <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center', gap:1 }}>{[0,1,2].map(i => <div key={i} style={{ width:1, height:'55%', background:'rgba(255,255,255,0.45)', borderRadius:1 }} />)}</div>}
@@ -3383,28 +4185,37 @@ function TimelineRow({ labeled, sections, title }) {
         </div>
       ))}
 
-      {hov && (
-        <div style={{ marginTop:8, padding:'8px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', fontSize:11, fontFamily:'var(--mono)', color:'var(--text2)' }}>
-          <span style={{ color:'var(--tx-1)', fontWeight:600 }}>Bar {hov.barNumber}</span>{' · '}
-          <span style={{ color: hov.isBoundaryEnd ? BND_CLR : hov.isUnique ? UNQ_CLR : hov.isEmpty ? 'var(--tx-3)' : hov.color }}>
-            {hov.patternLabel}
-          </span>
-          {' · '}{hov.noteCount} notes
-          {hov.role          && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>role:{hov.role}</span>}
-          {hov.variationType && <span style={{ color:'var(--mint)', marginLeft:8 }}>var:{hov.variationType}</span>}
-          {hov.pedalPitch    && <span style={{ color:'var(--accent)', marginLeft:8 }}>pedal:{hov.pedalPitch}</span>}
-          {hov.melodyDirection && <span style={{ color:'var(--sky)', marginLeft:8 }}>dir:{hov.melodyDirection}</span>}
-          {hov.sectionLabel  && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>sec:{hov.sectionLabel}</span>}
-          {hov.isUnique      && <span style={{ color:UNQ_CLR, marginLeft:8 }}>appears once</span>}
-          {hov.isBoundaryEnd && <span style={{ color:BND_CLR, marginLeft:8 }}>boundary</span>}
-        </div>
-      )}
+      {/* Tooltip — fixed height slot so layout never shifts */}
+      <div style={{
+        marginTop: 8,
+        minHeight: 36,
+        // Fade in/out smoothly instead of mount/unmount flicker
+        opacity: hovBar ? 1 : 0,
+        transition: 'opacity 0.12s ease',
+        pointerEvents: 'none',
+      }}>
+        {hovBar && (
+          <div style={{ padding:'8px 12px', background:'var(--surface2)', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', fontSize:11, fontFamily:'var(--mono)', color:'var(--text2)' }}>
+            <span style={{ color:'var(--tx-1)', fontWeight:600 }}>Bar {hovBar.barNumber}</span>{' · '}
+            <span style={{ color: hovBar.isBoundaryEnd ? BND_CLR : hovBar.isUnique ? UNQ_CLR : hovBar.isEmpty ? 'var(--tx-3)' : hovBar.color }}>
+              {hovBar.patternLabel}
+            </span>
+            {' · '}{hovBar.noteCount} notes
+            {hovBar.role          && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>role:{hovBar.role}</span>}
+            {hovBar.variationType && <span style={{ color:'var(--mint)', marginLeft:8 }}>var:{hovBar.variationType}</span>}
+            {hovBar.pedalPitch    && <span style={{ color:'var(--accent)', marginLeft:8 }}>pedal:{hovBar.pedalPitch}</span>}
+            {hovBar.melodyDirection && <span style={{ color:'var(--sky)', marginLeft:8 }}>dir:{hovBar.melodyDirection}</span>}
+            {hovBar.sectionLabel  && <span style={{ color:'var(--tx-3)', marginLeft:8 }}>sec:{hovBar.sectionLabel}</span>}
+            {hovBar.isUnique      && <span style={{ color:UNQ_CLR, marginLeft:8 }}>appears once</span>}
+            {hovBar.isBoundaryEnd && <span style={{ color:BND_CLR, marginLeft:8 }}>boundary</span>}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 function PatternCard({ pat, meta, spb }) {
-  // Get first occurrence bar number
   const firstOcc  = pat.occurrences[0]
   const firstBarN = firstOcc?.startBar ?? firstOcc?.barNumber
   const bar = meta.bars.find(b => (b.bar_number ?? b.bn) === firstBarN)
@@ -3572,7 +4383,7 @@ function YamlPanel({ yaml }) {
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
-        <button onClick={copy} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'none', color: copied?'var(--accent)':'var(--tx-2)', cursor:'pointer', fontSize:11, fontWeight:600, transition:'all 0.15s' }}>
+        <button onClick={copy} style={{ display:'flex', alignItems:'center', gap:5, padding:'5px 12px', borderRadius:'var(--radius-sm)', border:'1px solid var(--border)', background:'none', color: copied?'var(--accent)':'var(--tx-2)', cursor:'pointer', fontSize:11, fontWeight:600, transition:'color 0.15s' }}>
           {copied ? <Check size={11} stroke="var(--accent)" /> : <Copy size={11} />}
           {copied ? 'Copied!' : 'Copy YAML'}
         </button>
@@ -3742,7 +4553,21 @@ export default function Analyzer() {
 
       {rhFile && (
         <div style={{ display:'flex', justifyContent:'center', marginTop:8 }}>
-          <button onClick={runAnalysis} disabled={busy} style={{ padding:'8px 24px', borderRadius:'var(--radius-sm)', background:'var(--accent)', color:'white', border:'none', fontWeight:600, cursor:busy?'not-allowed':'pointer', opacity:busy?0.6:1, fontSize:13 }}>
+          <button
+            onClick={runAnalysis}
+            disabled={busy}
+            style={{
+              padding:'8px 24px',
+              borderRadius:'var(--radius-sm)',
+              background:'var(--accent)',
+              color:'white',
+              border:'none',
+              fontWeight:600,
+              cursor: busy ? 'not-allowed' : 'pointer',
+              fontSize:13,
+              transition:'opacity 0.2s',
+              opacity: busy ? 0.6 : 1,
+            }}>
             {busy ? 'Analyzing...' : 'Analyze'}
           </button>
         </div>
@@ -3783,47 +4608,43 @@ export default function Analyzer() {
           {/* Tabs */}
           <div style={{ display:'flex', gap:2, flexWrap:'wrap' }}>
             {INNER_TABS.map(t => (
-              <button key={t} onClick={() => setInner(t)} style={{ padding:'4px 12px', borderRadius:'var(--radius-sm)', border: inner===t ? '1px solid var(--border2)' : '1px solid transparent', background: inner===t ? 'var(--surface2)' : 'transparent', color: inner===t ? 'var(--tx-1)' : 'var(--tx-3)', fontSize:11, fontWeight: inner===t ? 600 : 400, cursor:'pointer', fontFamily:'var(--mono)' }}>
+              <button key={t} onClick={() => setInner(t)} style={{ padding:'4px 12px', borderRadius:'var(--radius-sm)', border: inner===t ? '1px solid var(--border2)' : '1px solid transparent', background: inner===t ? 'var(--surface2)' : 'transparent', color: inner===t ? 'var(--tx-1)' : 'var(--tx-3)', fontSize:11, fontWeight: inner===t ? 600 : 400, cursor:'pointer', fontFamily:'var(--mono)', transition:'color 0.1s, background 0.1s' }}>
                 {t}
               </button>
             ))}
           </div>
 
-          {/* Tab panels */}
-          <div>
-            {inner === 'Timeline' && (
-              <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-                <TimelineRow labeled={res.rhLabeled} sections={res.rhSections} title="Right hand" />
-                <TimelineRow labeled={res.lhLabeled} sections={res.lhSections} title="Left hand" />
-              </div>
-            )}
-            {inner === 'Patterns' && (
-              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                {res.rhPatterns.length > 0 && (
-                  <>
-                    <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase' }}>Right hand — {res.rhPatterns.length} pattern families</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
-                      {res.rhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
-                    </div>
-                  </>
-                )}
-                {res.lhPatterns.length > 0 && (
-                  <>
-                    <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase', marginTop:8 }}>Left hand — {res.lhPatterns.length} pattern families</div>
-                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
-                      {res.lhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
-                    </div>
-                  </>
-                )}
-                {res.rhPatterns.length === 0 && res.lhPatterns.length === 0 && (
-                  <div style={{ color:'var(--tx-3)', fontSize:12, fontFamily:'var(--mono)' }}>No repeating patterns detected</div>
-                )}
-              </div>
-            )}
-            {inner === 'Graph'      && <GraphView graph={res.rhGraph} />}
-            {inner === 'Hands'      && <HandTable alignment={res.alignment} />}
-            {inner === 'Boundaries' && <BoundariesPanel boundaries={res.boundaries} windowSizes={res.windowSizes} />}
-            {inner === 'YAML'       && <YamlPanel yaml={yaml} />}
+          {/* Tab panels — keep all mounted, show/hide with CSS to avoid remount flash */}
+          <div style={{ position:'relative' }}>
+            <div style={{ display: inner === 'Timeline' ? 'flex' : 'none', flexDirection:'column', gap:20 }}>
+              <TimelineRow labeled={res.rhLabeled} sections={res.rhSections} title="Right hand" />
+              <TimelineRow labeled={res.lhLabeled} sections={res.lhSections} title="Left hand" />
+            </div>
+            <div style={{ display: inner === 'Patterns' ? 'flex' : 'none', flexDirection:'column', gap:12 }}>
+              {res.rhPatterns.length > 0 && (
+                <>
+                  <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase' }}>Right hand — {res.rhPatterns.length} pattern families</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
+                    {res.rhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
+                  </div>
+                </>
+              )}
+              {res.lhPatterns.length > 0 && (
+                <>
+                  <div style={{ fontSize:10, fontWeight:600, color:'var(--tx-3)', fontFamily:'var(--mono)', letterSpacing:'1px', textTransform:'uppercase', marginTop:8 }}>Left hand — {res.lhPatterns.length} pattern families</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))', gap:10 }}>
+                    {res.lhPatterns.map(p => <PatternCard key={p.id} pat={p} meta={meta} spb={meta.subdivisions_per_bar} />)}
+                  </div>
+                </>
+              )}
+              {res.rhPatterns.length === 0 && res.lhPatterns.length === 0 && (
+                <div style={{ color:'var(--tx-3)', fontSize:12, fontFamily:'var(--mono)' }}>No repeating patterns detected</div>
+              )}
+            </div>
+            <div style={{ display: inner === 'Graph'      ? 'block' : 'none' }}><GraphView graph={res.rhGraph} /></div>
+            <div style={{ display: inner === 'Hands'      ? 'block' : 'none' }}><HandTable alignment={res.alignment} /></div>
+            <div style={{ display: inner === 'Boundaries' ? 'block' : 'none' }}><BoundariesPanel boundaries={res.boundaries} windowSizes={res.windowSizes} /></div>
+            <div style={{ display: inner === 'YAML'       ? 'block' : 'none' }}><YamlPanel yaml={yaml} /></div>
           </div>
         </div>
       )}
