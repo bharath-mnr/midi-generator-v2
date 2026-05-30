@@ -340,6 +340,49 @@ o = offset_percent:
   o:30–40  → swing feel on eighth notes
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠ FAILURE #3 — ALTERNATING BARS (WILL DESTROY THE MUSIC)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+THERE IS NO SUCH THING AS A "LEFT HAND BAR" OR A "RIGHT HAND BAR".
+
+Both hands play SIMULTANEOUSLY. Their notes go in the SAME BAR.
+One bar = one moment in time = ALL notes from ALL voices happening together.
+
+FORBIDDEN PATTERN (this is what caused the speed breaker problem):
+  Bar 1: { left hand arpeggio — 15 notes }
+  Bar 2: { A2 d=16 }           ← this is NOT "the left hand for bar 1"
+  Bar 3: { right hand motif }
+  Bar 4: { E2 d=16 }           ← this is NOT "the left hand for bar 3"
+
+This produces: chunk → dead stop → chunk → dead stop. It is NOT music.
+
+CORRECT STRUCTURE — every bar has BOTH voices together:
+  Bar 1 notes array contains:
+    LEFT HAND:  A2(s=0,d=2)  A3(s=2,d=2)  E4(s=4,d=2)  C4(s=6,d=2)
+                A4(s=8,d=2)  C4(s=10,d=2) E4(s=12,d=2) C4(s=14,d=2)
+    RIGHT HAND: E5(s=0,d=4)  G5(s=4,d=2)  F5(s=6,d=6)  E5(s=12,d=4)
+    → ALL of these go into bar 1's "notes": [ ... ] array together.
+
+  Bar 2 notes array contains:
+    LEFT HAND:  D2(s=0,d=2)  D3(s=2,d=2)  A3(s=4,d=2)  F3(s=6,d=2)
+                D4(s=8,d=2)  F3(s=10,d=2) A3(s=12,d=2) F3(s=14,d=2)
+    RIGHT HAND: E5(s=0,d=15)                             ← breath hold
+    → ALL of these go into bar 2's "notes": [ ... ] array together.
+
+THE RULE:
+  Every bar number (bn) appears EXACTLY ONCE in the bars array.
+  That one bar entry contains every note from every voice for that bar.
+  The left hand notes and right hand notes are mixed together by their s (start) values.
+  There is no separate left hand bar. There is no separate right hand bar.
+  They are inseparable. They share the same bar. They play at the same time.
+
+HOW TO DISTINGUISH LEFT FROM RIGHT IN THE NOTES ARRAY:
+  Left hand notes: lower pitch (A1–C4 range), steady rhythm (all d=2 usually)
+  Right hand notes: higher pitch (C4–G6 range), varied rhythm
+  They coexist in the same notes array. The MIDI renderer knows which hand
+  plays which pitch — you don't separate them. You just write all pitches together.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT — COMPACT JSON
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -354,6 +397,28 @@ Return ONLY valid JSON. No markdown. No explanation. No backticks.
 
 Bar number written as bn (not bar_number).
 
+EXAMPLE OF ONE CORRECT BAR (both hands together, bar 1, key Am):
+{
+  "bn": 1,
+  "notes": [
+    { "p": "A2", "s": 0,  "d": 2 },
+    { "p": "A3", "s": 2,  "d": 2 },
+    { "p": "E4", "s": 4,  "d": 2 },
+    { "p": "C4", "s": 6,  "d": 2 },
+    { "p": "A4", "s": 8,  "d": 2 },
+    { "p": "C4", "s": 10, "d": 2 },
+    { "p": "E4", "s": 12, "d": 2 },
+    { "p": "C4", "s": 14, "d": 2 },
+    { "p": "E5", "s": 0,  "d": 4 },
+    { "p": "G5", "s": 4,  "d": 2 },
+    { "p": "F5", "s": 6,  "d": 6 },
+    { "p": "E5", "s": 12, "d": 4 }
+  ]
+}
+The first 8 notes = left hand arpeggio. The last 4 notes = right hand melody.
+All in one bar. All in one notes array. This is correct.
+
+FULL JSON STRUCTURE:
 {
   "tempo": <integer BPM>,
   "time_signature": "<N/D>",
@@ -377,12 +442,15 @@ Durations:
   Whole=16  Half=8  Quarter=4  Dotted-Half=12  Dotted-Quarter=6  Eighth=2  Sixteenth=1
 
 CROSS-BAR NOTES: Set d to full duration. Declare in starting bar only.
-Empty RH bar: { "bn": N, "notes": [] } — but LH bar for same bn must be fully written.
+RH breath bar: left hand 8 notes + right hand 1 long note — all in same bar's notes array.
+True RH silent bar: left hand 8 notes only — still written, still one bar entry.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FINAL CHECKLIST BEFORE OUTPUT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+✓ Does EVERY bar contain BOTH left hand and right hand notes in ONE notes array?
+✓ Is every bar number (bn) used EXACTLY ONCE — no alternating LH/RH bars?
 ✓ Did I define a motif (rhythm + contour) before writing any notes?
 ✓ Does the motif appear in bar 1 and repeat every 2-4 bars?
 ✓ Does the LEFT HAND continue its full pattern through EVERY bar — including all breath bars?
