@@ -1,11 +1,126 @@
-// // // // // // //E:\pro\midigenerator_v2\backend\controllers\composeController.js
+// // // // // // // //E:\pro\midigenerator_v2\backend\controllers\composeController.js
+
+// // // // // // // 'use strict'
+
+// // // // // // // const path = require('path')
+// // // // // // // const fs   = require('fs')
+
+// // // // // // // // Inline uuid — no npm dependency needed
+// // // // // // // function uuid() {
+// // // // // // //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+// // // // // // //     const r = Math.random() * 16 | 0
+// // // // // // //     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+// // // // // // //   })
+// // // // // // // }
+
+// // // // // // // const ragService        = require('../services/ragService')
+// // // // // // // const geminiService     = require('../services/geminiService')
+// // // // // // // const validationService = require('../services/validationService')
+// // // // // // // const stitchService     = require('../services/stitchService')
+// // // // // // // const jsonToMidi        = require('../services/converters/jsonToMidi')
+// // // // // // // const { getDb }         = require('../db/database')
+// // // // // // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
+
+// // // // // // // async function compose(req, res, next) {
+// // // // // // //   try {
+// // // // // // //     const { prompt, section } = req.body
+
+// // // // // // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+// // // // // // //       return res.status(400).json({ error: 'prompt is required' })
+// // // // // // //     }
+
+// // // // // // //     let ragChunks = []
+// // // // // // //     try {
+// // // // // // //       ragChunks = await ragService.query(prompt.trim(), 5)
+// // // // // // //     } catch (ragErr) {
+// // // // // // //       console.warn('[compose] RAG query failed, continuing without context:', ragErr.message)
+// // // // // // //     }
+
+// // // // // // //     let generationJson
+
+// // // // // // //     if (section && Number.isInteger(section) && section > 1) {
+// // // // // // //       const sections = []
+// // // // // // //       for (let i = 1; i <= section; i++) {
+// // // // // // //         const sectionJson = await geminiService.compose(prompt, ragChunks, {
+// // // // // // //           sectionIndex: i,
+// // // // // // //           totalSections: section,
+// // // // // // //           previousSection: sections[i - 2] || null,
+// // // // // // //         })
+// // // // // // //         const validated = validationService.validate(sectionJson)
+// // // // // // //         if (!validated.ok) {
+// // // // // // //           const retried = await geminiService.retry(prompt, ragChunks, sectionJson, validated.errors)
+// // // // // // //           const revalidated = validationService.validate(retried)
+// // // // // // //           if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
+// // // // // // //           sections.push(retried)
+// // // // // // //         } else {
+// // // // // // //           sections.push(sectionJson)
+// // // // // // //         }
+// // // // // // //       }
+// // // // // // //       generationJson = stitchService.merge(sections)
+// // // // // // //     } else {
+// // // // // // //       const raw = await geminiService.compose(prompt, ragChunks)
+// // // // // // //       const validated = validationService.validate(raw)
+// // // // // // //       if (!validated.ok) {
+// // // // // // //         const retried = await geminiService.retry(prompt, ragChunks, raw, validated.errors)
+// // // // // // //         const revalidated = validationService.validate(retried)
+// // // // // // //         if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
+// // // // // // //         generationJson = retried
+// // // // // // //       } else {
+// // // // // // //         generationJson = raw
+// // // // // // //       }
+// // // // // // //     }
+
+// // // // // // //     const midiBytes = jsonToMidi.convert(generationJson)
+
+// // // // // // //     const filename = `composition_${uuid()}.mid`
+// // // // // // //     const filePath = path.join(OUTPUTS_DIR, filename)
+// // // // // // //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
+
+// // // // // // //     const db = getDb()
+// // // // // // //     const totalBars = generationJson.bars?.length || 0
+// // // // // // //     const result = db.prepare(`
+// // // // // // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // // // // // //       VALUES (?, ?, ?, ?, ?, ?)
+// // // // // // //     `).run(
+// // // // // // //       prompt.trim(),
+// // // // // // //       filePath,
+// // // // // // //       JSON.stringify(generationJson),
+// // // // // // //       generationJson.tempo || 120,
+// // // // // // //       generationJson.key   || 'C',
+// // // // // // //       totalBars,
+// // // // // // //     )
+
+// // // // // // //     res.json({
+// // // // // // //       id:       result.lastInsertRowid,
+// // // // // // //       midiUrl:  `/outputs/${filename}`,
+// // // // // // //       filename,
+// // // // // // //       key:      generationJson.key   || 'C',
+// // // // // // //       tempo:    generationJson.tempo || 120,
+// // // // // // //       bars:     totalBars,
+// // // // // // //       metadata: {
+// // // // // // //         time_signature:       generationJson.time_signature,
+// // // // // // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
+// // // // // // //       },
+// // // // // // //     })
+// // // // // // //   } catch (err) {
+// // // // // // //     next(err)
+// // // // // // //   }
+// // // // // // // }
+
+// // // // // // // module.exports = { compose }
+
+
+
+
+
 
 // // // // // // 'use strict'
+// // // // // // // backend/controllers/composeController.js
+// // // // // // // Added: reads `model` from req.body → routes to claudeService ('opus') or geminiService ('aria')
 
 // // // // // // const path = require('path')
 // // // // // // const fs   = require('fs')
 
-// // // // // // // Inline uuid — no npm dependency needed
 // // // // // // function uuid() {
 // // // // // //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
 // // // // // //     const r = Math.random() * 16 | 0
@@ -15,6 +130,7 @@
 
 // // // // // // const ragService        = require('../services/ragService')
 // // // // // // const geminiService     = require('../services/geminiService')
+// // // // // // const claudeService     = require('../services/claudeService')   // ← NEW
 // // // // // // const validationService = require('../services/validationService')
 // // // // // // const stitchService     = require('../services/stitchService')
 // // // // // // const jsonToMidi        = require('../services/converters/jsonToMidi')
@@ -23,11 +139,16 @@
 
 // // // // // // async function compose(req, res, next) {
 // // // // // //   try {
-// // // // // //     const { prompt, section } = req.body
+// // // // // //     const { prompt, section, model } = req.body   // model: 'aria' (default) | 'opus'
 
 // // // // // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
 // // // // // //       return res.status(400).json({ error: 'prompt is required' })
 // // // // // //     }
+
+// // // // // //     // Pick service based on model param
+// // // // // //     const isOpus = model === 'opus'
+// // // // // //     const aiService = isOpus ? claudeService : geminiService
+// // // // // //     const modelLabel = isOpus ? 'opus' : 'aria'
 
 // // // // // //     let ragChunks = []
 // // // // // //     try {
@@ -41,14 +162,14 @@
 // // // // // //     if (section && Number.isInteger(section) && section > 1) {
 // // // // // //       const sections = []
 // // // // // //       for (let i = 1; i <= section; i++) {
-// // // // // //         const sectionJson = await geminiService.compose(prompt, ragChunks, {
-// // // // // //           sectionIndex: i,
-// // // // // //           totalSections: section,
+// // // // // //         const sectionJson = await aiService.compose(prompt, ragChunks, {
+// // // // // //           sectionIndex:    i,
+// // // // // //           totalSections:   section,
 // // // // // //           previousSection: sections[i - 2] || null,
 // // // // // //         })
 // // // // // //         const validated = validationService.validate(sectionJson)
 // // // // // //         if (!validated.ok) {
-// // // // // //           const retried = await geminiService.retry(prompt, ragChunks, sectionJson, validated.errors)
+// // // // // //           const retried     = await aiService.retry(prompt, ragChunks, sectionJson, validated.errors)
 // // // // // //           const revalidated = validationService.validate(retried)
 // // // // // //           if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
 // // // // // //           sections.push(retried)
@@ -58,10 +179,10 @@
 // // // // // //       }
 // // // // // //       generationJson = stitchService.merge(sections)
 // // // // // //     } else {
-// // // // // //       const raw = await geminiService.compose(prompt, ragChunks)
+// // // // // //       const raw       = await aiService.compose(prompt, ragChunks)
 // // // // // //       const validated = validationService.validate(raw)
 // // // // // //       if (!validated.ok) {
-// // // // // //         const retried = await geminiService.retry(prompt, ragChunks, raw, validated.errors)
+// // // // // //         const retried     = await aiService.retry(prompt, ragChunks, raw, validated.errors)
 // // // // // //         const revalidated = validationService.validate(retried)
 // // // // // //         if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
 // // // // // //         generationJson = retried
@@ -71,14 +192,13 @@
 // // // // // //     }
 
 // // // // // //     const midiBytes = jsonToMidi.convert(generationJson)
-
-// // // // // //     const filename = `composition_${uuid()}.mid`
-// // // // // //     const filePath = path.join(OUTPUTS_DIR, filename)
+// // // // // //     const filename  = `composition_${uuid()}.mid`
+// // // // // //     const filePath  = path.join(OUTPUTS_DIR, filename)
 // // // // // //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
 
-// // // // // //     const db = getDb()
+// // // // // //     const db        = getDb()
 // // // // // //     const totalBars = generationJson.bars?.length || 0
-// // // // // //     const result = db.prepare(`
+// // // // // //     const result    = db.prepare(`
 // // // // // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
 // // // // // //       VALUES (?, ?, ?, ?, ?, ?)
 // // // // // //     `).run(
@@ -97,6 +217,7 @@
 // // // // // //       key:      generationJson.key   || 'C',
 // // // // // //       tempo:    generationJson.tempo || 120,
 // // // // // //       bars:     totalBars,
+// // // // // //       model:    modelLabel,          // ← returned so the frontend knows which was used
 // // // // // //       metadata: {
 // // // // // //         time_signature:       generationJson.time_signature,
 // // // // // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
@@ -114,9 +235,26 @@
 
 
 
+
+
+
+
+
+
 // // // // // 'use strict'
 // // // // // // backend/controllers/composeController.js
-// // // // // // Added: reads `model` from req.body → routes to claudeService ('opus') or geminiService ('aria')
+// // // // // //
+// // // // // // KEY CHANGES:
+// // // // // //   1. EXACT MATCH DETECTION
+// // // // // //      If prompt mentions a known track name → fetch exact JSON from SQLite tracks table
+// // // // // //      → inject full JSON directly into the prompt as primary reference
+// // // // // //      → "give exact gibran alcocer idea 10" now returns the ACTUAL stored JSON
+// // // // // //
+// // // // // //   2. topK INCREASED from 5 → 80
+// // // // // //      Gives AI 10× more musical context from Pinecone
+// // // // // //
+// // // // // //   3. HYBRID CONTEXT
+// // // // // //      Exact JSON (if matched) + top-80 style chunks = maximum accuracy
 
 // // // // // const path = require('path')
 // // // // // const fs   = require('fs')
@@ -130,48 +268,140 @@
 
 // // // // // const ragService        = require('../services/ragService')
 // // // // // const geminiService     = require('../services/geminiService')
-// // // // // const claudeService     = require('../services/claudeService')   // ← NEW
+// // // // // const claudeService     = require('../services/claudeService')
 // // // // // const validationService = require('../services/validationService')
 // // // // // const stitchService     = require('../services/stitchService')
 // // // // // const jsonToMidi        = require('../services/converters/jsonToMidi')
 // // // // // const { getDb }         = require('../db/database')
+
 // // // // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
+// // // // // // ── Detect if the user wants an exact known track reproduced ──────────────────
+// // // // // // Keywords that signal "give me that exact file"
+// // // // // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'copy', 'same as', 'identical to', 'verbatim']
+
+// // // // // function wantsExact(prompt) {
+// // // // //   const lower = prompt.toLowerCase()
+// // // // //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
+// // // // // }
+
+// // // // // // ── Compose ───────────────────────────────────────────────────────────────────
 // // // // // async function compose(req, res, next) {
 // // // // //   try {
-// // // // //     const { prompt, section, model } = req.body   // model: 'aria' (default) | 'opus'
+// // // // //     const { prompt, section, model } = req.body
 
 // // // // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
 // // // // //       return res.status(400).json({ error: 'prompt is required' })
 // // // // //     }
 
-// // // // //     // Pick service based on model param
-// // // // //     const isOpus = model === 'opus'
-// // // // //     const aiService = isOpus ? claudeService : geminiService
+// // // // //     const isOpus     = model === 'opus'
+// // // // //     const aiService  = isOpus ? claudeService : geminiService
 // // // // //     const modelLabel = isOpus ? 'opus' : 'aria'
 
-// // // // //     let ragChunks = []
+// // // // //     let ragChunks   = []
+// // // // //     let exactJson   = null
+// // // // //     let exactSource = null
+
+// // // // //     // ── STEP 1: Try exact track match ──────────────────────────────────────
+// // // // //     // Even if user doesn't say "exact", try to match — if they say
+// // // // //     // "generate gibran alcocer idea 10 style" we still inject the exact JSON
+// // // // //     // as primary reference for maximum accuracy
 // // // // //     try {
-// // // // //       ragChunks = await ragService.query(prompt.trim(), 5)
+// // // // //       exactSource = ragService.findMatchingTrack(prompt.trim())
+// // // // //       if (exactSource) {
+// // // // //         exactJson = ragService.getExactJson(exactSource)
+// // // // //         if (exactJson) {
+// // // // //           console.log(`[compose] Exact JSON found for "${exactSource}" — injecting as primary reference`)
+// // // // //         }
+// // // // //       }
+// // // // //     } catch (e) {
+// // // // //       console.warn('[compose] Exact match lookup failed:', e.message)
+// // // // //     }
+
+// // // // //     // ── STEP 2: Pinecone semantic search with topK=80 ──────────────────────
+// // // // //     // Get style context regardless of exact match
+// // // // //     try {
+// // // // //       ragChunks = await ragService.query(prompt.trim(), 80)
 // // // // //     } catch (ragErr) {
 // // // // //       console.warn('[compose] RAG query failed, continuing without context:', ragErr.message)
 // // // // //     }
 
+// // // // //     // ── STEP 3: If exact match AND user explicitly wants exact → return it ──
+// // // // //     // Parse the stored JSON and return it directly as the generation
+// // // // //     if (exactJson && wantsExact(prompt)) {
+// // // // //       try {
+// // // // //         const parsedExact = JSON.parse(exactJson)
+// // // // //         const midiBytes   = jsonToMidi.convert(parsedExact)
+// // // // //         const filename    = `composition_${uuid()}.mid`
+// // // // //         const filePath    = path.join(OUTPUTS_DIR, filename)
+// // // // //         fs.writeFileSync(filePath, Buffer.from(midiBytes))
+
+// // // // //         const db        = getDb()
+// // // // //         const totalBars = parsedExact.bars?.length || 0
+// // // // //         const result    = db.prepare(`
+// // // // //           INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // // // //           VALUES (?, ?, ?, ?, ?, ?)
+// // // // //         `).run(
+// // // // //           prompt.trim(), filePath, exactJson,
+// // // // //           parsedExact.tempo || 120, parsedExact.key || 'C', totalBars,
+// // // // //         )
+
+// // // // //         console.log(`[compose] Exact mode — returned stored JSON for "${exactSource}"`)
+// // // // //         return res.json({
+// // // // //           id:       result.lastInsertRowid,
+// // // // //           midiUrl:  `/outputs/${filename}`,
+// // // // //           filename,
+// // // // //           key:      parsedExact.key   || 'C',
+// // // // //           tempo:    parsedExact.tempo || 120,
+// // // // //           bars:     totalBars,
+// // // // //           model:    'exact',
+// // // // //           exactSource,
+// // // // //           metadata: {
+// // // // //             time_signature:       parsedExact.time_signature,
+// // // // //             subdivisions_per_bar: parsedExact.subdivisions_per_bar,
+// // // // //           },
+// // // // //         })
+// // // // //       } catch (e) {
+// // // // //         console.warn('[compose] Exact JSON parse failed, falling through to generation:', e.message)
+// // // // //       }
+// // // // //     }
+
+// // // // //     // ── STEP 4: Build augmented prompt ─────────────────────────────────────
+// // // // //     // If we have an exact JSON match, prepend it to the RAG context
+// // // // //     // so the AI uses it as the primary reference
+// // // // //     let effectivePrompt = prompt
+// // // // //     if (exactJson && exactSource) {
+// // // // //       // Inject exact JSON as a style reference (not verbatim reproduction)
+// // // // //       // This is much better than just having the chunked version
+// // // // //       const exactParsed = (() => { try { return JSON.parse(exactJson) } catch { return null } })()
+// // // // //       if (exactParsed) {
+// // // // //         const exactContext = [
+// // // // //           `PRIMARY REFERENCE — EXACT JSON for "${exactSource}":`,
+// // // // //           `Key: ${exactParsed.key}, Tempo: ${exactParsed.tempo} BPM, Bars: ${exactParsed.bars?.length}.`,
+// // // // //           `Full JSON: ${exactJson.slice(0, 4000)}${exactJson.length > 4000 ? '…[truncated]' : ''}`,
+// // // // //         ].join('\n')
+
+// // // // //         // Prepend to prompt so AI sees it
+// // // // //         effectivePrompt = `${prompt}\n\n[EXACT REFERENCE MATERIAL]\n${exactContext}`
+// // // // //       }
+// // // // //     }
+
+// // // // //     // ── STEP 5: Generate ───────────────────────────────────────────────────
 // // // // //     let generationJson
 
 // // // // //     if (section && Number.isInteger(section) && section > 1) {
 // // // // //       const sections = []
 // // // // //       for (let i = 1; i <= section; i++) {
-// // // // //         const sectionJson = await aiService.compose(prompt, ragChunks, {
+// // // // //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
 // // // // //           sectionIndex:    i,
 // // // // //           totalSections:   section,
 // // // // //           previousSection: sections[i - 2] || null,
 // // // // //         })
 // // // // //         const validated = validationService.validate(sectionJson)
 // // // // //         if (!validated.ok) {
-// // // // //           const retried     = await aiService.retry(prompt, ragChunks, sectionJson, validated.errors)
+// // // // //           const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
 // // // // //           const revalidated = validationService.validate(retried)
-// // // // //           if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
+// // // // //           if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
 // // // // //           sections.push(retried)
 // // // // //         } else {
 // // // // //           sections.push(sectionJson)
@@ -179,18 +409,19 @@
 // // // // //       }
 // // // // //       generationJson = stitchService.merge(sections)
 // // // // //     } else {
-// // // // //       const raw       = await aiService.compose(prompt, ragChunks)
+// // // // //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
 // // // // //       const validated = validationService.validate(raw)
 // // // // //       if (!validated.ok) {
-// // // // //         const retried     = await aiService.retry(prompt, ragChunks, raw, validated.errors)
+// // // // //         const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
 // // // // //         const revalidated = validationService.validate(retried)
-// // // // //         if (!revalidated.ok) throw new Error(`Validation failed after retry: ${revalidated.errors.join(', ')}`)
+// // // // //         if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
 // // // // //         generationJson = retried
 // // // // //       } else {
 // // // // //         generationJson = raw
 // // // // //       }
 // // // // //     }
 
+// // // // //     // ── STEP 6: Save and respond ───────────────────────────────────────────
 // // // // //     const midiBytes = jsonToMidi.convert(generationJson)
 // // // // //     const filename  = `composition_${uuid()}.mid`
 // // // // //     const filePath  = path.join(OUTPUTS_DIR, filename)
@@ -202,12 +433,8 @@
 // // // // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
 // // // // //       VALUES (?, ?, ?, ?, ?, ?)
 // // // // //     `).run(
-// // // // //       prompt.trim(),
-// // // // //       filePath,
-// // // // //       JSON.stringify(generationJson),
-// // // // //       generationJson.tempo || 120,
-// // // // //       generationJson.key   || 'C',
-// // // // //       totalBars,
+// // // // //       prompt.trim(), filePath, JSON.stringify(generationJson),
+// // // // //       generationJson.tempo || 120, generationJson.key || 'C', totalBars,
 // // // // //     )
 
 // // // // //     res.json({
@@ -217,7 +444,8 @@
 // // // // //       key:      generationJson.key   || 'C',
 // // // // //       tempo:    generationJson.tempo || 120,
 // // // // //       bars:     totalBars,
-// // // // //       model:    modelLabel,          // ← returned so the frontend knows which was used
+// // // // //       model:    modelLabel,
+// // // // //       exactSource: exactSource || null,
 // // // // //       metadata: {
 // // // // //         time_signature:       generationJson.time_signature,
 // // // // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
@@ -240,223 +468,209 @@
 
 
 
+// // // 'use strict'
+// // // // backend/controllers/composeController.js
+// // // //
+// // // // THE KEY CHANGE THAT BEATS NOTEBOOKLM:
+// // // //   OLD: ragService.query(topK=80) → AI sees 7% of knowledge
+// // // //   NEW: knowledgeService.getAllContext() → AI sees 100% of knowledge
+// // // //
+// // // // Full flow:
+// // // //   1. Check if prompt matches a known track exactly → if yes + wants exact → return stored JSON
+// // // //   2. Load ALL analytical chunks from Turso (100% context)
+// // // //   3. If track matched → also inject exact JSON as primary reference
+// // // //   4. Generate with full context
 
-// // // // 'use strict'
-// // // // // backend/controllers/composeController.js
-// // // // //
-// // // // // KEY CHANGES:
-// // // // //   1. EXACT MATCH DETECTION
-// // // // //      If prompt mentions a known track name → fetch exact JSON from SQLite tracks table
-// // // // //      → inject full JSON directly into the prompt as primary reference
-// // // // //      → "give exact gibran alcocer idea 10" now returns the ACTUAL stored JSON
-// // // // //
-// // // // //   2. topK INCREASED from 5 → 80
-// // // // //      Gives AI 10× more musical context from Pinecone
-// // // // //
-// // // // //   3. HYBRID CONTEXT
-// // // // //      Exact JSON (if matched) + top-80 style chunks = maximum accuracy
+// // // const path = require('path')
+// // // const fs   = require('fs')
 
-// // // // const path = require('path')
-// // // // const fs   = require('fs')
+// // // function uuid() {
+// // //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+// // //     const r = Math.random() * 16 | 0
+// // //     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+// // //   })
+// // // }
 
-// // // // function uuid() {
-// // // //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-// // // //     const r = Math.random() * 16 | 0
-// // // //     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-// // // //   })
-// // // // }
+// // // const knowledgeService  = require('../services/knowledgeService')
+// // // const geminiService     = require('../services/geminiService')
+// // // const claudeService     = require('../services/claudeService')
+// // // const validationService = require('../services/validationService')
+// // // const stitchService     = require('../services/stitchService')
+// // // const jsonToMidi        = require('../services/converters/jsonToMidi')
+// // // const { getDb }         = require('../db/database')
 
-// // // // const ragService        = require('../services/ragService')
-// // // // const geminiService     = require('../services/geminiService')
-// // // // const claudeService     = require('../services/claudeService')
-// // // // const validationService = require('../services/validationService')
-// // // // const stitchService     = require('../services/stitchService')
-// // // // const jsonToMidi        = require('../services/converters/jsonToMidi')
-// // // // const { getDb }         = require('../db/database')
+// // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
-// // // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
+// // // // Keywords that signal "give me the exact original file"
+// // // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'verbatim', 'copy of']
 
-// // // // // ── Detect if the user wants an exact known track reproduced ──────────────────
-// // // // // Keywords that signal "give me that exact file"
-// // // // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'copy', 'same as', 'identical to', 'verbatim']
+// // // function wantsExact(prompt) {
+// // //   const lower = prompt.toLowerCase()
+// // //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
+// // // }
 
-// // // // function wantsExact(prompt) {
-// // // //   const lower = prompt.toLowerCase()
-// // // //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
-// // // // }
+// // // async function compose(req, res, next) {
+// // //   try {
+// // //     const { prompt, section, model } = req.body
 
-// // // // // ── Compose ───────────────────────────────────────────────────────────────────
-// // // // async function compose(req, res, next) {
-// // // //   try {
-// // // //     const { prompt, section, model } = req.body
+// // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+// // //       return res.status(400).json({ error: 'prompt is required' })
+// // //     }
 
-// // // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-// // // //       return res.status(400).json({ error: 'prompt is required' })
-// // // //     }
+// // //     const isOpus     = model === 'opus'
+// // //     const aiService  = isOpus ? claudeService : geminiService
+// // //     const modelLabel = isOpus ? 'opus' : 'aria'
 
-// // // //     const isOpus     = model === 'opus'
-// // // //     const aiService  = isOpus ? claudeService : geminiService
-// // // //     const modelLabel = isOpus ? 'opus' : 'aria'
+// // //     // ── STEP 1: Try to find an exact matching track ────────────────────────
+// // //     let exactSource = null
+// // //     let exactJsonStr = null
+// // //     try {
+// // //       exactSource = await knowledgeService.findExactTrack(prompt.trim())
+// // //       if (exactSource) {
+// // //         exactJsonStr = await knowledgeService.getExactJson(exactSource)
+// // //       }
+// // //     } catch (e) {
+// // //       console.warn('[compose] Exact lookup failed:', e.message)
+// // //     }
 
-// // // //     let ragChunks   = []
-// // // //     let exactJson   = null
-// // // //     let exactSource = null
+// // //     // ── STEP 2: If exact match + user says "exact/original" → return directly ──
+// // //     if (exactJsonStr && wantsExact(prompt)) {
+// // //       try {
+// // //         const parsedExact = JSON.parse(exactJsonStr)
+// // //         const midiBytes   = jsonToMidi.convert(parsedExact)
+// // //         const filename    = `composition_${uuid()}.mid`
+// // //         const filePath    = path.join(OUTPUTS_DIR, filename)
+// // //         fs.writeFileSync(filePath, Buffer.from(midiBytes))
 
-// // // //     // ── STEP 1: Try exact track match ──────────────────────────────────────
-// // // //     // Even if user doesn't say "exact", try to match — if they say
-// // // //     // "generate gibran alcocer idea 10 style" we still inject the exact JSON
-// // // //     // as primary reference for maximum accuracy
-// // // //     try {
-// // // //       exactSource = ragService.findMatchingTrack(prompt.trim())
-// // // //       if (exactSource) {
-// // // //         exactJson = ragService.getExactJson(exactSource)
-// // // //         if (exactJson) {
-// // // //           console.log(`[compose] Exact JSON found for "${exactSource}" — injecting as primary reference`)
-// // // //         }
-// // // //       }
-// // // //     } catch (e) {
-// // // //       console.warn('[compose] Exact match lookup failed:', e.message)
-// // // //     }
+// // //         const db     = getDb()
+// // //         const totalBars = parsedExact.bars?.length || 0
+// // //         const result = await db.prepare(`
+// // //           INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // //           VALUES (?, ?, ?, ?, ?, ?)
+// // //         `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
 
-// // // //     // ── STEP 2: Pinecone semantic search with topK=80 ──────────────────────
-// // // //     // Get style context regardless of exact match
-// // // //     try {
-// // // //       ragChunks = await ragService.query(prompt.trim(), 80)
-// // // //     } catch (ragErr) {
-// // // //       console.warn('[compose] RAG query failed, continuing without context:', ragErr.message)
-// // // //     }
+// // //         console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
+// // //         return res.json({
+// // //           id:          result.lastInsertRowid,
+// // //           midiUrl:     `/outputs/${filename}`,
+// // //           filename,
+// // //           key:         parsedExact.key   || 'C',
+// // //           tempo:       parsedExact.tempo || 120,
+// // //           bars:        totalBars,
+// // //           model:       'exact',
+// // //           exactSource,
+// // //           metadata: {
+// // //             time_signature:       parsedExact.time_signature,
+// // //             subdivisions_per_bar: parsedExact.subdivisions_per_bar,
+// // //           },
+// // //         })
+// // //       } catch (e) {
+// // //         console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
+// // //       }
+// // //     }
 
-// // // //     // ── STEP 3: If exact match AND user explicitly wants exact → return it ──
-// // // //     // Parse the stored JSON and return it directly as the generation
-// // // //     if (exactJson && wantsExact(prompt)) {
-// // // //       try {
-// // // //         const parsedExact = JSON.parse(exactJson)
-// // // //         const midiBytes   = jsonToMidi.convert(parsedExact)
-// // // //         const filename    = `composition_${uuid()}.mid`
-// // // //         const filePath    = path.join(OUTPUTS_DIR, filename)
-// // // //         fs.writeFileSync(filePath, Buffer.from(midiBytes))
+// // //     // ── STEP 3: Load ALL knowledge context (100% — beats NotebookLM) ──────
+// // //     let allContext = ''
+// // //     try {
+// // //       allContext = await knowledgeService.getAllContext()
+// // //     } catch (e) {
+// // //       console.warn('[compose] getAllContext failed:', e.message)
+// // //     }
 
-// // // //         const db        = getDb()
-// // // //         const totalBars = parsedExact.bars?.length || 0
-// // // //         const result    = db.prepare(`
-// // // //           INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-// // // //           VALUES (?, ?, ?, ?, ?, ?)
-// // // //         `).run(
-// // // //           prompt.trim(), filePath, exactJson,
-// // // //           parsedExact.tempo || 120, parsedExact.key || 'C', totalBars,
-// // // //         )
+// // //     // ── STEP 4: Build augmented RAG chunks array ───────────────────────────
+// // //     // The existing geminiService/claudeService expect ragChunks array.
+// // //     // We package the full context as a single large chunk.
+// // //     const ragChunks = allContext
+// // //       ? [{ text: allContext, type: 'full_context', source: 'all_tracks', score: 1.0 }]
+// // //       : []
 
-// // // //         console.log(`[compose] Exact mode — returned stored JSON for "${exactSource}"`)
-// // // //         return res.json({
-// // // //           id:       result.lastInsertRowid,
-// // // //           midiUrl:  `/outputs/${filename}`,
-// // // //           filename,
-// // // //           key:      parsedExact.key   || 'C',
-// // // //           tempo:    parsedExact.tempo || 120,
-// // // //           bars:     totalBars,
-// // // //           model:    'exact',
-// // // //           exactSource,
-// // // //           metadata: {
-// // // //             time_signature:       parsedExact.time_signature,
-// // // //             subdivisions_per_bar: parsedExact.subdivisions_per_bar,
-// // // //           },
-// // // //         })
-// // // //       } catch (e) {
-// // // //         console.warn('[compose] Exact JSON parse failed, falling through to generation:', e.message)
-// // // //       }
-// // // //     }
+// // //     // If we matched a specific track, also inject its exact JSON
+// // //     // as the PRIMARY reference at the front
+// // //     let effectivePrompt = prompt
+// // //     if (exactJsonStr && exactSource) {
+// // //       try {
+// // //         const p = JSON.parse(exactJsonStr)
+// // //         const exactContext = [
+// // //           `\nPRIMARY EXACT REFERENCE — "${exactSource}":`,
+// // //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
+// // //           `Full JSON: ${exactJsonStr.slice(0, 6000)}${exactJsonStr.length > 6000 ? '\n…[truncated — use style guide above for full pattern reference]' : ''}`,
+// // //         ].join('\n')
+// // //         effectivePrompt = `${prompt}\n\n${exactContext}`
+// // //         console.log(`[compose] Injected exact JSON for "${exactSource}" into prompt`)
+// // //       } catch (_) {}
+// // //     }
 
-// // // //     // ── STEP 4: Build augmented prompt ─────────────────────────────────────
-// // // //     // If we have an exact JSON match, prepend it to the RAG context
-// // // //     // so the AI uses it as the primary reference
-// // // //     let effectivePrompt = prompt
-// // // //     if (exactJson && exactSource) {
-// // // //       // Inject exact JSON as a style reference (not verbatim reproduction)
-// // // //       // This is much better than just having the chunked version
-// // // //       const exactParsed = (() => { try { return JSON.parse(exactJson) } catch { return null } })()
-// // // //       if (exactParsed) {
-// // // //         const exactContext = [
-// // // //           `PRIMARY REFERENCE — EXACT JSON for "${exactSource}":`,
-// // // //           `Key: ${exactParsed.key}, Tempo: ${exactParsed.tempo} BPM, Bars: ${exactParsed.bars?.length}.`,
-// // // //           `Full JSON: ${exactJson.slice(0, 4000)}${exactJson.length > 4000 ? '…[truncated]' : ''}`,
-// // // //         ].join('\n')
+// // //     // ── STEP 5: Generate ───────────────────────────────────────────────────
+// // //     let generationJson
 
-// // // //         // Prepend to prompt so AI sees it
-// // // //         effectivePrompt = `${prompt}\n\n[EXACT REFERENCE MATERIAL]\n${exactContext}`
-// // // //       }
-// // // //     }
+// // //     if (section && Number.isInteger(section) && section > 1) {
+// // //       const sections = []
+// // //       for (let i = 1; i <= section; i++) {
+// // //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
+// // //           sectionIndex:    i,
+// // //           totalSections:   section,
+// // //           previousSection: sections[i - 2] || null,
+// // //         })
+// // //         const validated = validationService.validate(sectionJson)
+// // //         if (!validated.ok) {
+// // //           const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
+// // //           const revalidated = validationService.validate(retried)
+// // //           if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+// // //           sections.push(retried)
+// // //         } else {
+// // //           sections.push(sectionJson)
+// // //         }
+// // //       }
+// // //       generationJson = stitchService.merge(sections)
+// // //     } else {
+// // //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
+// // //       const validated = validationService.validate(raw)
+// // //       if (!validated.ok) {
+// // //         const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
+// // //         const revalidated = validationService.validate(retried)
+// // //         if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+// // //         generationJson = retried
+// // //       } else {
+// // //         generationJson = raw
+// // //       }
+// // //     }
 
-// // // //     // ── STEP 5: Generate ───────────────────────────────────────────────────
-// // // //     let generationJson
+// // //     // ── STEP 6: Save and respond ───────────────────────────────────────────
+// // //     const midiBytes = jsonToMidi.convert(generationJson)
+// // //     const filename  = `composition_${uuid()}.mid`
+// // //     const filePath  = path.join(OUTPUTS_DIR, filename)
+// // //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
 
-// // // //     if (section && Number.isInteger(section) && section > 1) {
-// // // //       const sections = []
-// // // //       for (let i = 1; i <= section; i++) {
-// // // //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
-// // // //           sectionIndex:    i,
-// // // //           totalSections:   section,
-// // // //           previousSection: sections[i - 2] || null,
-// // // //         })
-// // // //         const validated = validationService.validate(sectionJson)
-// // // //         if (!validated.ok) {
-// // // //           const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
-// // // //           const revalidated = validationService.validate(retried)
-// // // //           if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-// // // //           sections.push(retried)
-// // // //         } else {
-// // // //           sections.push(sectionJson)
-// // // //         }
-// // // //       }
-// // // //       generationJson = stitchService.merge(sections)
-// // // //     } else {
-// // // //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
-// // // //       const validated = validationService.validate(raw)
-// // // //       if (!validated.ok) {
-// // // //         const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
-// // // //         const revalidated = validationService.validate(retried)
-// // // //         if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-// // // //         generationJson = retried
-// // // //       } else {
-// // // //         generationJson = raw
-// // // //       }
-// // // //     }
+// // //     const db        = getDb()
+// // //     const totalBars = generationJson.bars?.length || 0
+// // //     const result    = await db.prepare(`
+// // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // //       VALUES (?, ?, ?, ?, ?, ?)
+// // //     `).run(
+// // //       prompt.trim(), filePath, JSON.stringify(generationJson),
+// // //       generationJson.tempo || 120, generationJson.key || 'C', totalBars,
+// // //     )
 
-// // // //     // ── STEP 6: Save and respond ───────────────────────────────────────────
-// // // //     const midiBytes = jsonToMidi.convert(generationJson)
-// // // //     const filename  = `composition_${uuid()}.mid`
-// // // //     const filePath  = path.join(OUTPUTS_DIR, filename)
-// // // //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
+// // //     res.json({
+// // //       id:          result.lastInsertRowid,
+// // //       midiUrl:     `/outputs/${filename}`,
+// // //       filename,
+// // //       key:         generationJson.key   || 'C',
+// // //       tempo:       generationJson.tempo || 120,
+// // //       bars:        totalBars,
+// // //       model:       modelLabel,
+// // //       exactSource: exactSource || null,
+// // //       metadata: {
+// // //         time_signature:       generationJson.time_signature,
+// // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
+// // //       },
+// // //     })
+// // //   } catch (err) {
+// // //     next(err)
+// // //   }
+// // // }
 
-// // // //     const db        = getDb()
-// // // //     const totalBars = generationJson.bars?.length || 0
-// // // //     const result    = db.prepare(`
-// // // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-// // // //       VALUES (?, ?, ?, ?, ?, ?)
-// // // //     `).run(
-// // // //       prompt.trim(), filePath, JSON.stringify(generationJson),
-// // // //       generationJson.tempo || 120, generationJson.key || 'C', totalBars,
-// // // //     )
-
-// // // //     res.json({
-// // // //       id:       result.lastInsertRowid,
-// // // //       midiUrl:  `/outputs/${filename}`,
-// // // //       filename,
-// // // //       key:      generationJson.key   || 'C',
-// // // //       tempo:    generationJson.tempo || 120,
-// // // //       bars:     totalBars,
-// // // //       model:    modelLabel,
-// // // //       exactSource: exactSource || null,
-// // // //       metadata: {
-// // // //         time_signature:       generationJson.time_signature,
-// // // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
-// // // //       },
-// // // //     })
-// // // //   } catch (err) {
-// // // //     next(err)
-// // // //   }
-// // // // }
-
-// // // // module.exports = { compose }
+// // // module.exports = { compose }
 
 
 
@@ -468,210 +682,260 @@
 
 
 
-// // 'use strict'
-// // // backend/controllers/composeController.js
-// // //
-// // // THE KEY CHANGE THAT BEATS NOTEBOOKLM:
-// // //   OLD: ragService.query(topK=80) → AI sees 7% of knowledge
-// // //   NEW: knowledgeService.getAllContext() → AI sees 100% of knowledge
-// // //
-// // // Full flow:
-// // //   1. Check if prompt matches a known track exactly → if yes + wants exact → return stored JSON
-// // //   2. Load ALL analytical chunks from Turso (100% context)
-// // //   3. If track matched → also inject exact JSON as primary reference
-// // //   4. Generate with full context
 
-// // const path = require('path')
-// // const fs   = require('fs')
 
-// // function uuid() {
-// //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-// //     const r = Math.random() * 16 | 0
-// //     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-// //   })
-// // }
 
-// // const knowledgeService  = require('../services/knowledgeService')
-// // const geminiService     = require('../services/geminiService')
-// // const claudeService     = require('../services/claudeService')
-// // const validationService = require('../services/validationService')
-// // const stitchService     = require('../services/stitchService')
-// // const jsonToMidi        = require('../services/converters/jsonToMidi')
-// // const { getDb }         = require('../db/database')
 
-// // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
-// // // Keywords that signal "give me the exact original file"
-// // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'verbatim', 'copy of']
+// // // 'use strict'
+// // // // backend/controllers/composeController.js  v2.0
+// // // //
+// // // // ── WHAT'S NEW ────────────────────────────────────────────────────────────────
+// // // //  - Injects note_pattern chunks from style-matched tracks into the compose prompt
+// // // //  - findStyleMatches() selects the 3 most relevant tracks by key/tempo/mood/name
+// // // //  - getNotePatterns() retrieves actual bar JSON from those tracks
+// // // //  - AI now sees real note examples from the most relevant reference tracks
+// // // //  - Pattern context is injected BEFORE the main compose call
+// // // // ─────────────────────────────────────────────────────────────────────────────
 
-// // function wantsExact(prompt) {
-// //   const lower = prompt.toLowerCase()
-// //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
-// // }
+// // // const path = require('path')
+// // // const fs   = require('fs')
 
-// // async function compose(req, res, next) {
-// //   try {
-// //     const { prompt, section, model } = req.body
+// // // function uuid() {
+// // //   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+// // //     const r = Math.random() * 16 | 0
+// // //     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+// // //   })
+// // // }
 
-// //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-// //       return res.status(400).json({ error: 'prompt is required' })
-// //     }
+// // // const knowledgeService  = require('../services/knowledgeService')
+// // // const geminiService     = require('../services/geminiService')
+// // // const claudeService     = require('../services/claudeService')
+// // // const validationService = require('../services/validationService')
+// // // const stitchService     = require('../services/stitchService')
+// // // const jsonToMidi        = require('../services/converters/jsonToMidi')
+// // // const { getDb }         = require('../db/database')
 
-// //     const isOpus     = model === 'opus'
-// //     const aiService  = isOpus ? claudeService : geminiService
-// //     const modelLabel = isOpus ? 'opus' : 'aria'
+// // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
-// //     // ── STEP 1: Try to find an exact matching track ────────────────────────
-// //     let exactSource = null
-// //     let exactJsonStr = null
-// //     try {
-// //       exactSource = await knowledgeService.findExactTrack(prompt.trim())
-// //       if (exactSource) {
-// //         exactJsonStr = await knowledgeService.getExactJson(exactSource)
-// //       }
-// //     } catch (e) {
-// //       console.warn('[compose] Exact lookup failed:', e.message)
-// //     }
+// // // // Keywords that signal "give me the exact original file"
+// // // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'verbatim', 'copy of']
 
-// //     // ── STEP 2: If exact match + user says "exact/original" → return directly ──
-// //     if (exactJsonStr && wantsExact(prompt)) {
-// //       try {
-// //         const parsedExact = JSON.parse(exactJsonStr)
-// //         const midiBytes   = jsonToMidi.convert(parsedExact)
-// //         const filename    = `composition_${uuid()}.mid`
-// //         const filePath    = path.join(OUTPUTS_DIR, filename)
-// //         fs.writeFileSync(filePath, Buffer.from(midiBytes))
+// // // function wantsExact(prompt) {
+// // //   const lower = prompt.toLowerCase()
+// // //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
+// // // }
 
-// //         const db     = getDb()
-// //         const totalBars = parsedExact.bars?.length || 0
-// //         const result = await db.prepare(`
-// //           INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-// //           VALUES (?, ?, ?, ?, ?, ?)
-// //         `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
+// // // async function compose(req, res, next) {
+// // //   try {
+// // //     const { prompt, section, model } = req.body
 
-// //         console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
-// //         return res.json({
-// //           id:          result.lastInsertRowid,
-// //           midiUrl:     `/outputs/${filename}`,
-// //           filename,
-// //           key:         parsedExact.key   || 'C',
-// //           tempo:       parsedExact.tempo || 120,
-// //           bars:        totalBars,
-// //           model:       'exact',
-// //           exactSource,
-// //           metadata: {
-// //             time_signature:       parsedExact.time_signature,
-// //             subdivisions_per_bar: parsedExact.subdivisions_per_bar,
-// //           },
-// //         })
-// //       } catch (e) {
-// //         console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
-// //       }
-// //     }
+// // //     if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+// // //       return res.status(400).json({ error: 'prompt is required' })
+// // //     }
 
-// //     // ── STEP 3: Load ALL knowledge context (100% — beats NotebookLM) ──────
-// //     let allContext = ''
-// //     try {
-// //       allContext = await knowledgeService.getAllContext()
-// //     } catch (e) {
-// //       console.warn('[compose] getAllContext failed:', e.message)
-// //     }
+// // //     const isOpus     = model === 'opus'
+// // //     const aiService  = isOpus ? claudeService : geminiService
+// // //     const modelLabel = isOpus ? 'opus' : 'aria'
 
-// //     // ── STEP 4: Build augmented RAG chunks array ───────────────────────────
-// //     // The existing geminiService/claudeService expect ragChunks array.
-// //     // We package the full context as a single large chunk.
-// //     const ragChunks = allContext
-// //       ? [{ text: allContext, type: 'full_context', source: 'all_tracks', score: 1.0 }]
-// //       : []
+// // //     // ── STEP 1: Try to find an exact matching track ────────────────────────
+// // //     let exactSource  = null
+// // //     let exactJsonStr = null
+// // //     try {
+// // //       exactSource = await knowledgeService.findExactTrack(prompt.trim())
+// // //       if (exactSource) {
+// // //         exactJsonStr = await knowledgeService.getExactJson(exactSource)
+// // //       }
+// // //     } catch (e) {
+// // //       console.warn('[compose] Exact lookup failed:', e.message)
+// // //     }
 
-// //     // If we matched a specific track, also inject its exact JSON
-// //     // as the PRIMARY reference at the front
-// //     let effectivePrompt = prompt
-// //     if (exactJsonStr && exactSource) {
-// //       try {
-// //         const p = JSON.parse(exactJsonStr)
-// //         const exactContext = [
-// //           `\nPRIMARY EXACT REFERENCE — "${exactSource}":`,
-// //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
-// //           `Full JSON: ${exactJsonStr.slice(0, 6000)}${exactJsonStr.length > 6000 ? '\n…[truncated — use style guide above for full pattern reference]' : ''}`,
-// //         ].join('\n')
-// //         effectivePrompt = `${prompt}\n\n${exactContext}`
-// //         console.log(`[compose] Injected exact JSON for "${exactSource}" into prompt`)
-// //       } catch (_) {}
-// //     }
+// // //     // ── STEP 2: If exact match + user wants exact → return directly ────────
+// // //     if (exactJsonStr && wantsExact(prompt)) {
+// // //       try {
+// // //         const parsedExact = JSON.parse(exactJsonStr)
+// // //         const midiBytes   = jsonToMidi.convert(parsedExact)
+// // //         const filename    = `composition_${uuid()}.mid`
+// // //         const filePath    = path.join(OUTPUTS_DIR, filename)
+// // //         fs.writeFileSync(filePath, Buffer.from(midiBytes))
 
-// //     // ── STEP 5: Generate ───────────────────────────────────────────────────
-// //     let generationJson
+// // //         const db        = getDb()
+// // //         const totalBars = parsedExact.bars?.length || 0
+// // //         const result    = await db.prepare(`
+// // //           INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // //           VALUES (?, ?, ?, ?, ?, ?)
+// // //         `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
 
-// //     if (section && Number.isInteger(section) && section > 1) {
-// //       const sections = []
-// //       for (let i = 1; i <= section; i++) {
-// //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
-// //           sectionIndex:    i,
-// //           totalSections:   section,
-// //           previousSection: sections[i - 2] || null,
-// //         })
-// //         const validated = validationService.validate(sectionJson)
-// //         if (!validated.ok) {
-// //           const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
-// //           const revalidated = validationService.validate(retried)
-// //           if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-// //           sections.push(retried)
-// //         } else {
-// //           sections.push(sectionJson)
-// //         }
-// //       }
-// //       generationJson = stitchService.merge(sections)
-// //     } else {
-// //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
-// //       const validated = validationService.validate(raw)
-// //       if (!validated.ok) {
-// //         const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
-// //         const revalidated = validationService.validate(retried)
-// //         if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-// //         generationJson = retried
-// //       } else {
-// //         generationJson = raw
-// //       }
-// //     }
+// // //         console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
+// // //         return res.json({
+// // //           id:          result.lastInsertRowid,
+// // //           midiUrl:     `/outputs/${filename}`,
+// // //           filename,
+// // //           key:         parsedExact.key   || 'C',
+// // //           tempo:       parsedExact.tempo || 120,
+// // //           bars:        totalBars,
+// // //           model:       'exact',
+// // //           exactSource,
+// // //           metadata: {
+// // //             time_signature:       parsedExact.time_signature,
+// // //             subdivisions_per_bar: parsedExact.subdivisions_per_bar,
+// // //           },
+// // //         })
+// // //       } catch (e) {
+// // //         console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
+// // //       }
+// // //     }
 
-// //     // ── STEP 6: Save and respond ───────────────────────────────────────────
-// //     const midiBytes = jsonToMidi.convert(generationJson)
-// //     const filename  = `composition_${uuid()}.mid`
-// //     const filePath  = path.join(OUTPUTS_DIR, filename)
-// //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
+// // //     // ── STEP 3: Load ALL knowledge context ────────────────────────────────
+// // //     let allContext = ''
+// // //     try {
+// // //       allContext = await knowledgeService.getAllContext()
+// // //     } catch (e) {
+// // //       console.warn('[compose] getAllContext failed:', e.message)
+// // //     }
 
-// //     const db        = getDb()
-// //     const totalBars = generationJson.bars?.length || 0
-// //     const result    = await db.prepare(`
-// //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-// //       VALUES (?, ?, ?, ?, ?, ?)
-// //     `).run(
-// //       prompt.trim(), filePath, JSON.stringify(generationJson),
-// //       generationJson.tempo || 120, generationJson.key || 'C', totalBars,
-// //     )
+// // //     // ── STEP 3.5: Inject note patterns from style-matched tracks ──────────
+// // //     // This is the key upgrade: AI now sees actual bar JSON from relevant tracks
+// // //     let patternContext = ''
+// // //     try {
+// // //       const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), 3)
 
-// //     res.json({
-// //       id:          result.lastInsertRowid,
-// //       midiUrl:     `/outputs/${filename}`,
-// //       filename,
-// //       key:         generationJson.key   || 'C',
-// //       tempo:       generationJson.tempo || 120,
-// //       bars:        totalBars,
-// //       model:       modelLabel,
-// //       exactSource: exactSource || null,
-// //       metadata: {
-// //         time_signature:       generationJson.time_signature,
-// //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
-// //       },
-// //     })
-// //   } catch (err) {
-// //     next(err)
-// //   }
-// // }
+// // //       if (styleMatches.length > 0) {
+// // //         console.log(`[compose] Style matches: ${styleMatches.join(', ')}`)
 
-// // module.exports = { compose }
+// // //         const patternParts = []
+// // //         for (const src of styleMatches) {
+// // //           const patterns = await knowledgeService.getNotePatterns(src)
+// // //           if (patterns) {
+// // //             patternParts.push(
+// // //               `┌─ FROM: "${src}" ─────────────────────────────\n${patterns}\n└────────────────────────────────────────────────`
+// // //             )
+// // //           }
+// // //         }
 
+// // //         if (patternParts.length > 0) {
+// // //           patternContext = [
+// // //             '',
+// // //             '## TOP REFERENCE PATTERNS — READ THESE FIRST',
+// // //             'These are ACTUAL BARS from the most relevant reference tracks in your knowledge base.',
+// // //             'Your job:',
+// // //             '  1. Study the rhythm density (how many notes per bar)',
+// // //             '  2. Study the note durations (d values) — are they long or short?',
+// // //             '  3. Study the register (p values) — where does melody sit? where does bass sit?',
+// // //             '  4. Study the spacing between notes (s values)',
+// // //             '  5. Compose your output with the SAME structural feel but ORIGINAL pitches.',
+// // //             'Do NOT copy these notes verbatim. Mirror the pattern and style.',
+// // //             '',
+// // //             patternParts.join('\n\n'),
+// // //           ].join('\n')
+// // //         }
+// // //       }
+// // //     } catch (e) {
+// // //       console.warn('[compose] Style match / pattern injection failed:', e.message)
+// // //     }
+
+// // //     // ── STEP 4: Build context chunks array ────────────────────────────────
+// // //     const ragChunks = allContext
+// // //       ? [{ text: allContext, type: 'full_context', source: 'all_tracks', score: 1.0 }]
+// // //       : []
+
+// // //     // ── STEP 5: Build effective prompt with all context injected ──────────
+// // //     let effectivePrompt = prompt
+
+// // //     // Inject exact match reference JSON if we found a matching track
+// // //     if (exactJsonStr && exactSource) {
+// // //       try {
+// // //         const p = JSON.parse(exactJsonStr)
+// // //         const exactContext = [
+// // //           `\nPRIMARY REFERENCE — "${exactSource}":`,
+// // //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
+// // //           `First 8 bars (use as primary blueprint):`,
+// // //           JSON.stringify({ bars: (p.bars || []).slice(0, 8) }),
+// // //         ].join('\n')
+// // //         effectivePrompt = `${prompt}\n\n${exactContext}`
+// // //         console.log(`[compose] Injected exact JSON for "${exactSource}"`)
+// // //       } catch (_) {}
+// // //     }
+
+// // //     // Append pattern context from style matches
+// // //     if (patternContext) {
+// // //       effectivePrompt = effectivePrompt + patternContext
+// // //     }
+
+// // //     // ── STEP 6: Generate ──────────────────────────────────────────────────
+// // //     let generationJson
+
+// // //     if (section && Number.isInteger(section) && section > 1) {
+// // //       // Multi-section generation
+// // //       const sections = []
+// // //       for (let i = 1; i <= section; i++) {
+// // //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
+// // //           sectionIndex:    i,
+// // //           totalSections:   section,
+// // //           previousSection: sections[i - 2] || null,
+// // //         })
+// // //         const validated = validationService.validate(sectionJson)
+// // //         if (!validated.ok) {
+// // //           const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
+// // //           const revalidated = validationService.validate(retried)
+// // //           if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+// // //           sections.push(retried)
+// // //         } else {
+// // //           sections.push(sectionJson)
+// // //         }
+// // //       }
+// // //       generationJson = stitchService.merge(sections)
+// // //     } else {
+// // //       // Single generation
+// // //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
+// // //       const validated = validationService.validate(raw)
+// // //       if (!validated.ok) {
+// // //         const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
+// // //         const revalidated = validationService.validate(retried)
+// // //         if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+// // //         generationJson = retried
+// // //       } else {
+// // //         generationJson = raw
+// // //       }
+// // //     }
+
+// // //     // ── STEP 7: Save and respond ──────────────────────────────────────────
+// // //     const midiBytes = jsonToMidi.convert(generationJson)
+// // //     const filename  = `composition_${uuid()}.mid`
+// // //     const filePath  = path.join(OUTPUTS_DIR, filename)
+// // //     fs.writeFileSync(filePath, Buffer.from(midiBytes))
+
+// // //     const db        = getDb()
+// // //     const totalBars = generationJson.bars?.length || 0
+// // //     const result    = await db.prepare(`
+// // //       INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+// // //       VALUES (?, ?, ?, ?, ?, ?)
+// // //     `).run(
+// // //       prompt.trim(), filePath, JSON.stringify(generationJson),
+// // //       generationJson.tempo || 120, generationJson.key || 'C', totalBars,
+// // //     )
+
+// // //     res.json({
+// // //       id:          result.lastInsertRowid,
+// // //       midiUrl:     `/outputs/${filename}`,
+// // //       filename,
+// // //       key:         generationJson.key   || 'C',
+// // //       tempo:       generationJson.tempo || 120,
+// // //       bars:        totalBars,
+// // //       model:       modelLabel,
+// // //       exactSource: exactSource || null,
+// // //       styleMatches: [],  // could expose this to UI later
+// // //       metadata: {
+// // //         time_signature:       generationJson.time_signature,
+// // //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
+// // //       },
+// // //     })
+// // //   } catch (err) {
+// // //     next(err)
+// // //   }
+// // // }
+
+// // // module.exports = { compose }
 
 
 
@@ -719,7 +983,17 @@
 // // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
 // // // Keywords that signal "give me the exact original file"
-// // const EXACT_KEYWORDS = ['exact', 'original', 'reproduce', 'verbatim', 'copy of']
+// // const EXACT_KEYWORDS = [
+// //   'give me the exact',
+// //   'return the exact',
+// //   'exact copy',
+// //   'exact original',
+// //   'reproduce exactly',
+// //   'verbatim',
+// //   'copy of the original',
+// //   'give me the original track',
+// //   'return the original',
+// // ]
 
 // // function wantsExact(prompt) {
 // //   const lower = prompt.toLowerCase()
@@ -842,18 +1116,21 @@
 // //     // ── STEP 5: Build effective prompt with all context injected ──────────
 // //     let effectivePrompt = prompt
 
-// //     // Inject exact match reference JSON if we found a matching track
+// //     // Inject only metadata from exact match (NOT raw notes — that causes copying)
+// //     // Raw note patterns are handled by findStyleMatches/getNotePatterns above,
+// //     // which include explicit "DO NOT copy verbatim" instructions.
 // //     if (exactJsonStr && exactSource) {
 // //       try {
 // //         const p = JSON.parse(exactJsonStr)
-// //         const exactContext = [
-// //           `\nPRIMARY REFERENCE — "${exactSource}":`,
+// //         const metaContext = [
+// //           `\nSTYLE REFERENCE — "${exactSource}":`,
 // //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
-// //           `First 8 bars (use as primary blueprint):`,
-// //           JSON.stringify({ bars: (p.bars || []).slice(0, 8) }),
+// //           `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
+// //           `Use the note_pattern chunks from this track (injected below) as structural reference only.`,
+// //           `Generate completely new, original notes — do not reproduce the reference.`,
 // //         ].join('\n')
-// //         effectivePrompt = `${prompt}\n\n${exactContext}`
-// //         console.log(`[compose] Injected exact JSON for "${exactSource}"`)
+// //         effectivePrompt = `${prompt}\n\n${metaContext}`
+// //         console.log(`[compose] Injected style metadata for "${exactSource}" (no raw notes)`)
 // //       } catch (_) {}
 // //     }
 
@@ -948,18 +1225,24 @@
 
 
 
-
-
-
 // 'use strict'
-// // backend/controllers/composeController.js  v2.0
+// // backend/controllers/composeController.js  v3.0
 // //
-// // ── WHAT'S NEW ────────────────────────────────────────────────────────────────
-// //  - Injects note_pattern chunks from style-matched tracks into the compose prompt
-// //  - findStyleMatches() selects the 3 most relevant tracks by key/tempo/mood/name
-// //  - getNotePatterns() retrieves actual bar JSON from those tracks
-// //  - AI now sees real note examples from the most relevant reference tracks
-// //  - Pattern context is injected BEFORE the main compose call
+// // ── WHAT CHANGED FROM v2.0 ────────────────────────────────────────────────────
+// //  - REMOVED getAllContext() — was dumping 90+ tracks (~240KB) into prompt.
+// //    LLM couldn't focus on anything → generic up-down scale output.
+// //
+// //  - NEW: getFocusedContext(prompt, topK=5) — fetches ALL chunk types
+// //    (metadata, note_pattern, style, structure) for the TOP 5 most relevant
+// //    tracks only. ~15–25KB of highly relevant context instead of 240KB noise.
+// //
+// //  - note_pattern chunks now arrive FIRST in context (most important).
+// //    metadata + style + structure follow as support context.
+// //
+// //  - Pattern extraction instructions stay prominent in effectivePrompt.
+// //
+// //  - enhancePrompt (geminiService) is bypassed by passing the prompt directly
+// //    through buildComposePromptDirect() which skips the blueprint expansion.
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // const path = require('path')
@@ -999,6 +1282,55 @@
 //   const lower = prompt.toLowerCase()
 //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
 // }
+
+// // ── NEW: getFocusedContext ─────────────────────────────────────────────────────
+// // Gets ALL chunk types for the TOP topK style-matched tracks.
+// // Returns a structured context string with note_patterns FIRST.
+// // ~15–25KB focused context vs 240KB+ context bomb from getAllContext().
+// async function getFocusedContext(prompt, topK = 5) {
+//   const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
+//   if (!styleMatches || styleMatches.length === 0) {
+//     console.log('[compose] No style matches found — composing without reference context')
+//     return { ragText: '', matchedSources: [] }
+//   }
+
+//   console.log(`[compose] Focused context from ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
+
+//   const db = getDb()
+//   const parts = []
+
+//   for (const src of styleMatches) {
+//     const rows = await db.prepare(`
+//       SELECT summary, chunk_type
+//       FROM knowledge
+//       WHERE source_file = ?
+//       AND summary IS NOT NULL AND length(summary) > 10
+//       ORDER BY
+//         CASE chunk_type
+//           WHEN 'note_pattern_rh'   THEN 1
+//           WHEN 'note_pattern_lh'   THEN 2
+//           WHEN 'note_pattern_full' THEN 3
+//           WHEN 'metadata'          THEN 4
+//           WHEN 'style'             THEN 5
+//           WHEN 'structure'         THEN 6
+//           ELSE 7
+//         END,
+//         id ASC
+//     `).all(src)
+
+//     if (!rows || rows.length === 0) continue
+
+//     const sections = rows.map(r => r.summary).join('\n\n')
+//     parts.push(`\n${'═'.repeat(60)}\nREFERENCE TRACK: "${src}"\n${'═'.repeat(60)}\n${sections}`)
+//   }
+
+//   return {
+//     ragText: parts.join('\n\n'),
+//     matchedSources: styleMatches,
+//   }
+// }
+
+// // ─────────────────────────────────────────────────────────────────────────────
 
 // async function compose(req, res, next) {
 //   try {
@@ -1060,65 +1392,30 @@
 //       }
 //     }
 
-//     // ── STEP 3: Load ALL knowledge context ────────────────────────────────
-//     let allContext = ''
+//     // ── STEP 3: Get FOCUSED context (top 5 style-matched tracks only) ──────
+//     // REPLACES getAllContext() which was dumping 90+ tracks = 240KB context bomb.
+//     // getFocusedContext returns 15–25KB of highly relevant, ordered content.
+//     let ragText        = ''
+//     let matchedSources = []
 //     try {
-//       allContext = await knowledgeService.getAllContext()
+//       const focused  = await getFocusedContext(prompt.trim(), 5)
+//       ragText        = focused.ragText
+//       matchedSources = focused.matchedSources
 //     } catch (e) {
-//       console.warn('[compose] getAllContext failed:', e.message)
+//       console.warn('[compose] getFocusedContext failed:', e.message)
 //     }
 
-//     // ── STEP 3.5: Inject note patterns from style-matched tracks ──────────
-//     // This is the key upgrade: AI now sees actual bar JSON from relevant tracks
-//     let patternContext = ''
-//     try {
-//       const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), 3)
-
-//       if (styleMatches.length > 0) {
-//         console.log(`[compose] Style matches: ${styleMatches.join(', ')}`)
-
-//         const patternParts = []
-//         for (const src of styleMatches) {
-//           const patterns = await knowledgeService.getNotePatterns(src)
-//           if (patterns) {
-//             patternParts.push(
-//               `┌─ FROM: "${src}" ─────────────────────────────\n${patterns}\n└────────────────────────────────────────────────`
-//             )
-//           }
-//         }
-
-//         if (patternParts.length > 0) {
-//           patternContext = [
-//             '',
-//             '## TOP REFERENCE PATTERNS — READ THESE FIRST',
-//             'These are ACTUAL BARS from the most relevant reference tracks in your knowledge base.',
-//             'Your job:',
-//             '  1. Study the rhythm density (how many notes per bar)',
-//             '  2. Study the note durations (d values) — are they long or short?',
-//             '  3. Study the register (p values) — where does melody sit? where does bass sit?',
-//             '  4. Study the spacing between notes (s values)',
-//             '  5. Compose your output with the SAME structural feel but ORIGINAL pitches.',
-//             'Do NOT copy these notes verbatim. Mirror the pattern and style.',
-//             '',
-//             patternParts.join('\n\n'),
-//           ].join('\n')
-//         }
-//       }
-//     } catch (e) {
-//       console.warn('[compose] Style match / pattern injection failed:', e.message)
-//     }
-
-//     // ── STEP 4: Build context chunks array ────────────────────────────────
-//     const ragChunks = allContext
-//       ? [{ text: allContext, type: 'full_context', source: 'all_tracks', score: 1.0 }]
+//     // ── STEP 4: Build ragChunks array for AI services ──────────────────────
+//     // Pass focused context as a single well-structured chunk.
+//     // AI services use this in formatRagContext() inside compose prompt.
+//     const ragChunks = ragText
+//       ? [{ text: ragText, type: 'note_patterns_focused', source: matchedSources.join(', '), score: 1.0 }]
 //       : []
 
-//     // ── STEP 5: Build effective prompt with all context injected ──────────
-//     let effectivePrompt = prompt
+//     // ── STEP 5: Build effective prompt ────────────────────────────────────
+//     // Only inject style metadata from exact match — note patterns already in ragChunks.
+//     let effectivePrompt = prompt.trim()
 
-//     // Inject only metadata from exact match (NOT raw notes — that causes copying)
-//     // Raw note patterns are handled by findStyleMatches/getNotePatterns above,
-//     // which include explicit "DO NOT copy verbatim" instructions.
 //     if (exactJsonStr && exactSource) {
 //       try {
 //         const p = JSON.parse(exactJsonStr)
@@ -1126,17 +1423,11 @@
 //           `\nSTYLE REFERENCE — "${exactSource}":`,
 //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
 //           `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
-//           `Use the note_pattern chunks from this track (injected below) as structural reference only.`,
-//           `Generate completely new, original notes — do not reproduce the reference.`,
+//           `Use the note_pattern chunks (already in context) as structural reference only.`,
+//           `Generate completely new, original notes — do NOT reproduce the reference.`,
 //         ].join('\n')
-//         effectivePrompt = `${prompt}\n\n${metaContext}`
-//         console.log(`[compose] Injected style metadata for "${exactSource}" (no raw notes)`)
+//         effectivePrompt = `${effectivePrompt}\n\n${metaContext}`
 //       } catch (_) {}
-//     }
-
-//     // Append pattern context from style matches
-//     if (patternContext) {
-//       effectivePrompt = effectivePrompt + patternContext
 //     }
 
 //     // ── STEP 6: Generate ──────────────────────────────────────────────────
@@ -1193,15 +1484,15 @@
 //     )
 
 //     res.json({
-//       id:          result.lastInsertRowid,
-//       midiUrl:     `/outputs/${filename}`,
+//       id:           result.lastInsertRowid,
+//       midiUrl:      `/outputs/${filename}`,
 //       filename,
-//       key:         generationJson.key   || 'C',
-//       tempo:       generationJson.tempo || 120,
-//       bars:        totalBars,
-//       model:       modelLabel,
-//       exactSource: exactSource || null,
-//       styleMatches: [],  // could expose this to UI later
+//       key:          generationJson.key   || 'C',
+//       tempo:        generationJson.tempo || 120,
+//       bars:         totalBars,
+//       model:        modelLabel,
+//       exactSource:  exactSource || null,
+//       styleMatches: matchedSources,
 //       metadata: {
 //         time_signature:       generationJson.time_signature,
 //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
@@ -1226,23 +1517,31 @@
 
 
 'use strict'
-// backend/controllers/composeController.js  v3.0
+// backend/controllers/composeController.js  — RAG VERSION
 //
-// ── WHAT CHANGED FROM v2.0 ────────────────────────────────────────────────────
-//  - REMOVED getAllContext() — was dumping 90+ tracks (~240KB) into prompt.
-//    LLM couldn't focus on anything → generic up-down scale output.
+// ── WHAT CHANGED ──────────────────────────────────────────────────────────────
+//  BEFORE: getFocusedContext() → keyword scoring → SQL text rows
+//  NOW:    ragService.query()  → Voyage AI embedding → Pinecone semantic search
 //
-//  - NEW: getFocusedContext(prompt, topK=5) — fetches ALL chunk types
-//    (metadata, note_pattern, style, structure) for the TOP 5 most relevant
-//    tracks only. ~15–25KB of highly relevant context instead of 240KB noise.
+//  Flow:
+//    1. Embed user prompt with Voyage AI ("dark melancholic slow piano" → vector)
+//    2. Search Pinecone for nearest 20 chunk vectors
+//    3. Get back the most semantically relevant note_pattern, style, metadata chunks
+//    4. Inject into compose prompt
 //
-//  - note_pattern chunks now arrive FIRST in context (most important).
-//    metadata + style + structure follow as support context.
+//  Why this is better than keyword scoring:
+//    - "melancholic and sparse" matches a track named "track_047.json" if its
+//      note_pattern chunk describes sparse, slow, minor-key patterns
+//    - Keyword scoring requires the filename to contain "melancholic" or "sparse"
+//    - Semantic search understands meaning — finds the RIGHT reference tracks
 //
-//  - Pattern extraction instructions stay prominent in effectivePrompt.
+//  Fallback:
+//    If Pinecone query fails (API down, not configured), falls back to
+//    getFocusedContext() which uses keyword scoring from Turso.
+//    System never breaks — just gets less accurate retrieval.
 //
-//  - enhancePrompt (geminiService) is bypassed by passing the prompt directly
-//    through buildComposePromptDirect() which skips the blueprint expansion.
+//  Required env vars (same as ingestController):
+//    VOYAGE_API_KEY, PINECONE_API_KEY, PINECONE_INDEX
 // ─────────────────────────────────────────────────────────────────────────────
 
 const path = require('path')
@@ -1256,6 +1555,7 @@ function uuid() {
 }
 
 const knowledgeService  = require('../services/knowledgeService')
+const ragService        = require('../services/ragService')
 const geminiService     = require('../services/geminiService')
 const claudeService     = require('../services/claudeService')
 const validationService = require('../services/validationService')
@@ -1265,68 +1565,90 @@ const { getDb }         = require('../db/database')
 
 const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
-// Keywords that signal "give me the exact original file"
+// ── Exact match keywords ───────────────────────────────────────────────────────
 const EXACT_KEYWORDS = [
-  'give me the exact',
-  'return the exact',
-  'exact copy',
-  'exact original',
-  'reproduce exactly',
-  'verbatim',
-  'copy of the original',
-  'give me the original track',
-  'return the original',
+  'give me the exact', 'return the exact', 'exact copy',
+  'exact original', 'reproduce exactly', 'verbatim',
+  'copy of the original', 'give me the original track', 'return the original',
 ]
-
 function wantsExact(prompt) {
   const lower = prompt.toLowerCase()
   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
 }
 
-// ── NEW: getFocusedContext ─────────────────────────────────────────────────────
-// Gets ALL chunk types for the TOP topK style-matched tracks.
-// Returns a structured context string with note_patterns FIRST.
-// ~15–25KB focused context vs 240KB+ context bomb from getAllContext().
-async function getFocusedContext(prompt, topK = 5) {
-  const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
-  if (!styleMatches || styleMatches.length === 0) {
-    console.log('[compose] No style matches found — composing without reference context')
-    return { ragText: '', matchedSources: [] }
+// ── Semantic retrieval with keyword fallback ───────────────────────────────────
+// Primary:  ragService.query() — Voyage AI embeds prompt → Pinecone cosine search
+// Fallback: getFocusedContext() — keyword scoring from Turso
+//
+// topK=20 means 20 chunks. With 4 chunks per track that is ~5 tracks of context.
+// note_pattern chunks score highest because they contain real musical structure
+// that semantically matches style descriptions.
+async function getSemanticContext(prompt, topK = 20) {
+  try {
+    const chunks = await ragService.query(prompt, topK)
+
+    if (chunks && chunks.length > 0) {
+      console.log(`[compose] ✔ Pinecone semantic search → ${chunks.length} chunks`)
+
+      // Sort so note_pattern chunks come first — most important for composition
+      const sorted = [
+        ...chunks.filter(c => c.type?.includes('note_pattern')),
+        ...chunks.filter(c => c.type === 'metadata'),
+        ...chunks.filter(c => c.type === 'style'),
+        ...chunks.filter(c => c.type === 'structure'),
+        ...chunks.filter(c => !['metadata','style','structure'].includes(c.type) && !c.type?.includes('note_pattern')),
+      ]
+
+      return sorted
+    }
+
+    console.log('[compose] ⚠ Pinecone returned 0 results — using keyword fallback')
+    return await getKeywordFallback(prompt)
+  } catch (e) {
+    console.warn(`[compose] ⚠ Pinecone query failed: ${e.message} — using keyword fallback`)
+    return await getKeywordFallback(prompt)
   }
+}
 
-  console.log(`[compose] Focused context from ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
+// ── Keyword fallback (original getFocusedContext logic) ────────────────────────
+// Used when Pinecone is unavailable. Less accurate but always works.
+async function getKeywordFallback(prompt, topK = 5) {
+  try {
+    const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
+    if (!styleMatches || styleMatches.length === 0) return []
 
-  const db = getDb()
-  const parts = []
+    console.log(`[compose] Keyword fallback → ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
 
-  for (const src of styleMatches) {
-    const rows = await db.prepare(`
-      SELECT summary, chunk_type
-      FROM knowledge
-      WHERE source_file = ?
-      AND summary IS NOT NULL AND length(summary) > 10
-      ORDER BY
-        CASE chunk_type
-          WHEN 'note_pattern_rh'   THEN 1
-          WHEN 'note_pattern_lh'   THEN 2
-          WHEN 'note_pattern_full' THEN 3
-          WHEN 'metadata'          THEN 4
-          WHEN 'style'             THEN 5
-          WHEN 'structure'         THEN 6
-          ELSE 7
-        END,
-        id ASC
-    `).all(src)
+    const db    = getDb()
+    const parts = []
 
-    if (!rows || rows.length === 0) continue
+    for (const src of styleMatches) {
+      const rows = await db.prepare(`
+        SELECT summary AS text, chunk_type AS type, source_file AS source
+        FROM knowledge
+        WHERE source_file = ?
+        AND summary IS NOT NULL AND length(summary) > 10
+        ORDER BY
+          CASE chunk_type
+            WHEN 'note_pattern_rh'   THEN 1
+            WHEN 'note_pattern_lh'   THEN 2
+            WHEN 'note_pattern_full' THEN 3
+            WHEN 'metadata'          THEN 4
+            WHEN 'style'             THEN 5
+            WHEN 'structure'         THEN 6
+            ELSE 7
+          END, id ASC
+      `).all(src)
 
-    const sections = rows.map(r => r.summary).join('\n\n')
-    parts.push(`\n${'═'.repeat(60)}\nREFERENCE TRACK: "${src}"\n${'═'.repeat(60)}\n${sections}`)
-  }
+      for (const row of (rows || [])) {
+        parts.push({ text: row.text, type: row.type, source: row.source, score: 0.8 })
+      }
+    }
 
-  return {
-    ragText: parts.join('\n\n'),
-    matchedSources: styleMatches,
+    return parts
+  } catch (e) {
+    console.warn(`[compose] Keyword fallback also failed: ${e.message}`)
+    return []
   }
 }
 
@@ -1344,19 +1666,17 @@ async function compose(req, res, next) {
     const aiService  = isOpus ? claudeService : geminiService
     const modelLabel = isOpus ? 'opus' : 'aria'
 
-    // ── STEP 1: Try to find an exact matching track ────────────────────────
+    // ── STEP 1: Exact track lookup ─────────────────────────────────────────
     let exactSource  = null
     let exactJsonStr = null
     try {
       exactSource = await knowledgeService.findExactTrack(prompt.trim())
-      if (exactSource) {
-        exactJsonStr = await knowledgeService.getExactJson(exactSource)
-      }
+      if (exactSource) exactJsonStr = await knowledgeService.getExactJson(exactSource)
     } catch (e) {
       console.warn('[compose] Exact lookup failed:', e.message)
     }
 
-    // ── STEP 2: If exact match + user wants exact → return directly ────────
+    // ── STEP 2: Return exact JSON if requested ─────────────────────────────
     if (exactJsonStr && wantsExact(prompt)) {
       try {
         const parsedExact = JSON.parse(exactJsonStr)
@@ -1372,7 +1692,7 @@ async function compose(req, res, next) {
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
 
-        console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
+        console.log(`[compose] EXACT MODE → "${exactSource}"`)
         return res.json({
           id:          result.lastInsertRowid,
           midiUrl:     `/outputs/${filename}`,
@@ -1388,53 +1708,37 @@ async function compose(req, res, next) {
           },
         })
       } catch (e) {
-        console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
+        console.warn('[compose] Exact convert failed, falling through:', e.message)
       }
     }
 
-    // ── STEP 3: Get FOCUSED context (top 5 style-matched tracks only) ──────
-    // REPLACES getAllContext() which was dumping 90+ tracks = 240KB context bomb.
-    // getFocusedContext returns 15–25KB of highly relevant, ordered content.
-    let ragText        = ''
-    let matchedSources = []
-    try {
-      const focused  = await getFocusedContext(prompt.trim(), 5)
-      ragText        = focused.ragText
-      matchedSources = focused.matchedSources
-    } catch (e) {
-      console.warn('[compose] getFocusedContext failed:', e.message)
-    }
+    // ── STEP 3: Semantic search in Pinecone (with keyword fallback) ────────
+    // This is the real RAG step.
+    // "dark melancholic slow piano in Am" → embedding → nearest 20 chunks
+    // Returns note_pattern + style + metadata chunks from the most relevant tracks.
+    const ragChunks = await getSemanticContext(prompt.trim(), 20)
 
-    // ── STEP 4: Build ragChunks array for AI services ──────────────────────
-    // Pass focused context as a single well-structured chunk.
-    // AI services use this in formatRagContext() inside compose prompt.
-    const ragChunks = ragText
-      ? [{ text: ragText, type: 'note_patterns_focused', source: matchedSources.join(', '), score: 1.0 }]
-      : []
-
-    // ── STEP 5: Build effective prompt ────────────────────────────────────
-    // Only inject style metadata from exact match — note patterns already in ragChunks.
+    // ── STEP 4: Build effective prompt ─────────────────────────────────────
     let effectivePrompt = prompt.trim()
 
+    // Add style metadata from exact match if found
     if (exactJsonStr && exactSource) {
       try {
         const p = JSON.parse(exactJsonStr)
-        const metaContext = [
-          `\nSTYLE REFERENCE — "${exactSource}":`,
+        effectivePrompt += [
+          `\n\nSTYLE REFERENCE — "${exactSource}":`,
           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
           `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
-          `Use the note_pattern chunks (already in context) as structural reference only.`,
+          `Note patterns from this track are already in your reference context.`,
           `Generate completely new, original notes — do NOT reproduce the reference.`,
         ].join('\n')
-        effectivePrompt = `${effectivePrompt}\n\n${metaContext}`
       } catch (_) {}
     }
 
-    // ── STEP 6: Generate ──────────────────────────────────────────────────
+    // ── STEP 5: Generate ───────────────────────────────────────────────────
     let generationJson
 
     if (section && Number.isInteger(section) && section > 1) {
-      // Multi-section generation
       const sections = []
       for (let i = 1; i <= section; i++) {
         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
@@ -1454,7 +1758,6 @@ async function compose(req, res, next) {
       }
       generationJson = stitchService.merge(sections)
     } else {
-      // Single generation
       const raw       = await aiService.compose(effectivePrompt, ragChunks)
       const validated = validationService.validate(raw)
       if (!validated.ok) {
@@ -1467,7 +1770,7 @@ async function compose(req, res, next) {
       }
     }
 
-    // ── STEP 7: Save and respond ──────────────────────────────────────────
+    // ── STEP 6: Save and respond ───────────────────────────────────────────
     const midiBytes = jsonToMidi.convert(generationJson)
     const filename  = `composition_${uuid()}.mid`
     const filePath  = path.join(OUTPUTS_DIR, filename)
@@ -1492,7 +1795,7 @@ async function compose(req, res, next) {
       bars:         totalBars,
       model:        modelLabel,
       exactSource:  exactSource || null,
-      styleMatches: matchedSources,
+      retrieval:    ragChunks.length > 0 ? 'semantic' : 'none',
       metadata: {
         time_signature:       generationJson.time_signature,
         subdivisions_per_bar: generationJson.subdivisions_per_bar,
