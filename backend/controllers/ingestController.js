@@ -354,179 +354,20 @@
 
 
 
-'use strict'
-// backend/controllers/ingestController.js
-// Uses knowledgeService (Turso) instead of ragService (Pinecone)
-
-const fs   = require('fs')
-const path = require('path')
-
-const { uploadMidi, uploadDoc, multerPromise } = require('../middleware/upload')
-const midiToJson         = require('../services/converters/midiToJson')
-const chunkingService    = require('../services/chunkingService')
-const knowledgeService   = require('../services/knowledgeService')
-const { getDb }          = require('../db/database')
-
-// Detect MIDI JSON in text files
-function detectMidiJson(text) {
-  try {
-    const trimmed = text.trim()
-    if (!trimmed.startsWith('{')) return null
-    const json = JSON.parse(trimmed)
-    if (!Array.isArray(json.bars) || json.bars.length === 0) return null
-    if (!json.tempo && !json.time_signature && !json.key) return null
-    return json
-  } catch { return null }
-}
-
-// ── POST /api/ingest/midi ─────────────────────────────────────────────────────
-async function ingestMidi(req, res, next) {
-  try {
-    await multerPromise(uploadMidi)(req, res)
-    if (!req.file) return res.status(400).json({ error: 'No MIDI file uploaded' })
-
-    const { path: filePath, originalname } = req.file
-    const fileBuffer = fs.readFileSync(filePath)
-    const json       = midiToJson.convert(fileBuffer)
-
-    // Store exact JSON
-    await knowledgeService.saveExactJson(originalname, JSON.stringify(json), {
-      key: json.key, tempo: json.tempo, bars: json.bars?.length,
-    })
-
-    // Deep analysis → chunks
-    const chunks = chunkingService.chunkMidi(json, originalname)
-
-    // Save to Turso
-    await knowledgeService.saveChunks(chunks, originalname)
-
-    // Record in history table for UI
-    const db     = getDb()
-    const result = await db.prepare(`
-      INSERT INTO knowledge (source_file, chunk_id, chunk_type, summary)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(chunk_id) DO NOTHING
-    `).run(originalname, `${originalname}_meta`, 'exact_ref', `Key:${json.key} Tempo:${json.tempo} Bars:${json.bars?.length}`)
-
-    fs.unlink(filePath, () => {})
-
-    res.json({
-      success: true,
-      id:      result.lastInsertRowid,
-      name:    originalname,
-      type:    'midi',
-      key:     json.key   || 'C',
-      tempo:   json.tempo || 120,
-      chunks:  chunks.length,
-      date:    'Just now',
-    })
-  } catch (err) { next(err) }
-}
-
-// ── POST /api/ingest/doc ──────────────────────────────────────────────────────
-async function ingestDoc(req, res, next) {
-  try {
-    await multerPromise(uploadDoc)(req, res)
-    if (!req.file) return res.status(400).json({ error: 'No document uploaded' })
-
-    const { path: filePath, originalname } = req.file
-    const ext = path.extname(originalname).toLowerCase()
-
-    let chunks
-    let responseExtra = {}
-
-    if (ext === '.pdf') {
-      const text = await extractPdfText(filePath)
-      chunks = chunkingService.chunkDoc(text, originalname)
-    } else {
-      const text      = fs.readFileSync(filePath, 'utf8')
-      const midiJson  = detectMidiJson(text)
-
-      if (midiJson) {
-        console.log(`[ingest] MIDI JSON in "${originalname}" → deep analysis`)
-
-        // Store exact untouched JSON
-        await knowledgeService.saveExactJson(originalname, text.trim(), {
-          key: midiJson.key, tempo: midiJson.tempo, bars: midiJson.bars?.length,
-        })
-
-        chunks = chunkingService.chunkMidi(midiJson, originalname)
-        responseExtra = { type: 'midi', key: midiJson.key || 'C', tempo: midiJson.tempo || 120 }
-      } else {
-        chunks = chunkingService.chunkDoc(text, originalname)
-      }
-    }
-
-    // Save all chunks to Turso knowledge table
-    await knowledgeService.saveChunks(chunks, originalname)
-
-    fs.unlink(filePath, () => {})
-
-    res.json({
-      success: true,
-      name:    originalname,
-      type:    responseExtra.type || 'doc',
-      chunks:  chunks.length,
-      date:    'Just now',
-      ...responseExtra,
-    })
-  } catch (err) { next(err) }
-}
-
-async function extractPdfText(filePath) {
-  const buf = fs.readFileSync(filePath)
-  const str = buf.toString('latin1')
-  const out = []
-  const re  = /stream\r?\n([\s\S]*?)\r?\nendstream/g
-  let m
-  while ((m = re.exec(str)) !== null) {
-    const readable = m[1].replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim()
-    if (readable.length > 20) out.push(readable)
-  }
-  return out.join('\n\n') || '[Could not extract PDF text]'
-}
-
-module.exports = { ingestMidi, ingestDoc }
-
-
-
-
-
-
-
-
 // 'use strict'
-// // backend/controllers/ingestController.js  — RAG VERSION
-// //
-// // ── WHAT CHANGED ──────────────────────────────────────────────────────────────
-// //  BEFORE: chunks saved to SQLite (Turso) only
-// //  NOW:    chunks saved to SQLite (Turso) + Pinecone embeddings (Voyage AI)
-// //
-// //  On every ingest:
-// //    1. chunkMidi() / chunkDoc()     — same as before
-// //    2. knowledgeService.saveChunks  — saves text to Turso (for exact JSON lookup)
-// //    3. ragService.upsert(chunks)    — embeds chunks with Voyage AI → Pinecone
-// //
-// //  Both stores must stay in sync. Turso = text store. Pinecone = vector store.
-// //  Compose uses Pinecone for semantic search. Exact playback uses Turso.
-// //
-// //  Required env vars:
-// //    VOYAGE_API_KEY     — from https://www.voyageai.com (50M free tokens/month)
-// //    PINECONE_API_KEY   — from https://pinecone.io (free tier)
-// //    PINECONE_INDEX     — your index name (must be dim=1024, metric=cosine)
-// // ─────────────────────────────────────────────────────────────────────────────
+// // backend/controllers/ingestController.js
+// // Uses knowledgeService (Turso) instead of ragService (Pinecone)
 
 // const fs   = require('fs')
 // const path = require('path')
 
 // const { uploadMidi, uploadDoc, multerPromise } = require('../middleware/upload')
-// const midiToJson       = require('../services/converters/midiToJson')
-// const chunkingService  = require('../services/chunkingService')
-// const knowledgeService = require('../services/knowledgeService')
-// const ragService       = require('../services/ragService')
-// const { getDb }        = require('../db/database')
+// const midiToJson         = require('../services/converters/midiToJson')
+// const chunkingService    = require('../services/chunkingService')
+// const knowledgeService   = require('../services/knowledgeService')
+// const { getDb }          = require('../db/database')
 
-// // ── Detect MIDI JSON in text files ────────────────────────────────────────────
+// // Detect MIDI JSON in text files
 // function detectMidiJson(text) {
 //   try {
 //     const trimmed = text.trim()
@@ -536,25 +377,6 @@ module.exports = { ingestMidi, ingestDoc }
 //     if (!json.tempo && !json.time_signature && !json.key) return null
 //     return json
 //   } catch { return null }
-// }
-
-// // ── Save to both stores ───────────────────────────────────────────────────────
-// // Always saves to Turso first (fast, reliable fallback).
-// // Then attempts Pinecone upsert. If Pinecone fails, logs warning but does NOT
-// // fail the whole ingest — Turso still has the data for keyword fallback.
-// async function saveToBothStores(chunks, sourceName) {
-//   // 1. Always save to Turso (text store — used for exact JSON lookup + keyword fallback)
-//   await knowledgeService.saveChunks(chunks, sourceName)
-
-//   // 2. Try to save to Pinecone (vector store — used for semantic search in compose)
-//   try {
-//     await ragService.upsert(chunks)
-//     console.log(`[ingest] ✔ Pinecone upserted ${chunks.length} vectors for "${sourceName}"`)
-//   } catch (e) {
-//     // Non-fatal — compose will fall back to keyword scoring via Turso
-//     console.warn(`[ingest] ⚠ Pinecone upsert failed for "${sourceName}": ${e.message}`)
-//     console.warn(`[ingest]   Compose will use keyword fallback. Check VOYAGE_API_KEY and PINECONE_API_KEY.`)
-//   }
 // }
 
 // // ── POST /api/ingest/midi ─────────────────────────────────────────────────────
@@ -567,18 +389,18 @@ module.exports = { ingestMidi, ingestDoc }
 //     const fileBuffer = fs.readFileSync(filePath)
 //     const json       = midiToJson.convert(fileBuffer)
 
-//     // Store exact JSON in Turso tracks table (for exact playback retrieval)
+//     // Store exact JSON
 //     await knowledgeService.saveExactJson(originalname, JSON.stringify(json), {
 //       key: json.key, tempo: json.tempo, bars: json.bars?.length,
 //     })
 
-//     // Build analytical chunks
+//     // Deep analysis → chunks
 //     const chunks = chunkingService.chunkMidi(json, originalname)
 
-//     // Save to BOTH stores (Turso + Pinecone)
-//     await saveToBothStores(chunks, originalname)
+//     // Save to Turso
+//     await knowledgeService.saveChunks(chunks, originalname)
 
-//     // Record in knowledge table for UI list
+//     // Record in history table for UI
 //     const db     = getDb()
 //     const result = await db.prepare(`
 //       INSERT INTO knowledge (source_file, chunk_id, chunk_type, summary)
@@ -617,13 +439,13 @@ module.exports = { ingestMidi, ingestDoc }
 //       const text = await extractPdfText(filePath)
 //       chunks = chunkingService.chunkDoc(text, originalname)
 //     } else {
-//       const text     = fs.readFileSync(filePath, 'utf8')
-//       const midiJson = detectMidiJson(text)
+//       const text      = fs.readFileSync(filePath, 'utf8')
+//       const midiJson  = detectMidiJson(text)
 
 //       if (midiJson) {
 //         console.log(`[ingest] MIDI JSON in "${originalname}" → deep analysis`)
 
-//         // Store exact untouched JSON in Turso tracks table
+//         // Store exact untouched JSON
 //         await knowledgeService.saveExactJson(originalname, text.trim(), {
 //           key: midiJson.key, tempo: midiJson.tempo, bars: midiJson.bars?.length,
 //         })
@@ -635,8 +457,8 @@ module.exports = { ingestMidi, ingestDoc }
 //       }
 //     }
 
-//     // Save to BOTH stores (Turso + Pinecone)
-//     await saveToBothStores(chunks, originalname)
+//     // Save all chunks to Turso knowledge table
+//     await knowledgeService.saveChunks(chunks, originalname)
 
 //     fs.unlink(filePath, () => {})
 
@@ -651,7 +473,6 @@ module.exports = { ingestMidi, ingestDoc }
 //   } catch (err) { next(err) }
 // }
 
-// // ── PDF text extraction ───────────────────────────────────────────────────────
 // async function extractPdfText(filePath) {
 //   const buf = fs.readFileSync(filePath)
 //   const str = buf.toString('latin1')
@@ -666,3 +487,182 @@ module.exports = { ingestMidi, ingestDoc }
 // }
 
 // module.exports = { ingestMidi, ingestDoc }
+
+
+
+
+
+
+
+
+'use strict'
+// backend/controllers/ingestController.js  — RAG VERSION
+//
+// ── WHAT CHANGED ──────────────────────────────────────────────────────────────
+//  BEFORE: chunks saved to SQLite (Turso) only
+//  NOW:    chunks saved to SQLite (Turso) + Pinecone embeddings (Voyage AI)
+//
+//  On every ingest:
+//    1. chunkMidi() / chunkDoc()     — same as before
+//    2. knowledgeService.saveChunks  — saves text to Turso (for exact JSON lookup)
+//    3. ragService.upsert(chunks)    — embeds chunks with Voyage AI → Pinecone
+//
+//  Both stores must stay in sync. Turso = text store. Pinecone = vector store.
+//  Compose uses Pinecone for semantic search. Exact playback uses Turso.
+//
+//  Required env vars:
+//    VOYAGE_API_KEY     — from https://www.voyageai.com (50M free tokens/month)
+//    PINECONE_API_KEY   — from https://pinecone.io (free tier)
+//    PINECONE_INDEX     — your index name (must be dim=1024, metric=cosine)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fs   = require('fs')
+const path = require('path')
+
+const { uploadMidi, uploadDoc, multerPromise } = require('../middleware/upload')
+const midiToJson       = require('../services/converters/midiToJson')
+const chunkingService  = require('../services/chunkingService')
+const knowledgeService = require('../services/knowledgeService')
+const ragService       = require('../services/ragService')
+const { getDb }        = require('../db/database')
+
+// ── Detect MIDI JSON in text files ────────────────────────────────────────────
+function detectMidiJson(text) {
+  try {
+    const trimmed = text.trim()
+    if (!trimmed.startsWith('{')) return null
+    const json = JSON.parse(trimmed)
+    if (!Array.isArray(json.bars) || json.bars.length === 0) return null
+    if (!json.tempo && !json.time_signature && !json.key) return null
+    return json
+  } catch { return null }
+}
+
+// ── Save to both stores ───────────────────────────────────────────────────────
+// Always saves to Turso first (fast, reliable fallback).
+// Then attempts Pinecone upsert. If Pinecone fails, logs warning but does NOT
+// fail the whole ingest — Turso still has the data for keyword fallback.
+async function saveToBothStores(chunks, sourceName) {
+  // 1. Always save to Turso (text store — used for exact JSON lookup + keyword fallback)
+  await knowledgeService.saveChunks(chunks, sourceName)
+
+  // 2. Try to save to Pinecone (vector store — used for semantic search in compose)
+  try {
+    await ragService.upsert(chunks)
+    console.log(`[ingest] ✔ Pinecone upserted ${chunks.length} vectors for "${sourceName}"`)
+  } catch (e) {
+    // Non-fatal — compose will fall back to keyword scoring via Turso
+    console.warn(`[ingest] ⚠ Pinecone upsert failed for "${sourceName}": ${e.message}`)
+    console.warn(`[ingest]   Compose will use keyword fallback. Check VOYAGE_API_KEY and PINECONE_API_KEY.`)
+  }
+}
+
+// ── POST /api/ingest/midi ─────────────────────────────────────────────────────
+async function ingestMidi(req, res, next) {
+  try {
+    await multerPromise(uploadMidi)(req, res)
+    if (!req.file) return res.status(400).json({ error: 'No MIDI file uploaded' })
+
+    const { path: filePath, originalname } = req.file
+    const fileBuffer = fs.readFileSync(filePath)
+    const json       = midiToJson.convert(fileBuffer)
+
+    // Store exact JSON in Turso tracks table (for exact playback retrieval)
+    await knowledgeService.saveExactJson(originalname, JSON.stringify(json), {
+      key: json.key, tempo: json.tempo, bars: json.bars?.length,
+    })
+
+    // Build analytical chunks
+    const chunks = chunkingService.chunkMidi(json, originalname)
+
+    // Save to BOTH stores (Turso + Pinecone)
+    await saveToBothStores(chunks, originalname)
+
+    // Record in knowledge table for UI list
+    const db     = getDb()
+    const result = await db.prepare(`
+      INSERT INTO knowledge (source_file, chunk_id, chunk_type, summary)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(chunk_id) DO NOTHING
+    `).run(originalname, `${originalname}_meta`, 'exact_ref', `Key:${json.key} Tempo:${json.tempo} Bars:${json.bars?.length}`)
+
+    fs.unlink(filePath, () => {})
+
+    res.json({
+      success: true,
+      id:      result.lastInsertRowid,
+      name:    originalname,
+      type:    'midi',
+      key:     json.key   || 'C',
+      tempo:   json.tempo || 120,
+      chunks:  chunks.length,
+      date:    'Just now',
+    })
+  } catch (err) { next(err) }
+}
+
+// ── POST /api/ingest/doc ──────────────────────────────────────────────────────
+async function ingestDoc(req, res, next) {
+  try {
+    await multerPromise(uploadDoc)(req, res)
+    if (!req.file) return res.status(400).json({ error: 'No document uploaded' })
+
+    const { path: filePath, originalname } = req.file
+    const ext = path.extname(originalname).toLowerCase()
+
+    let chunks
+    let responseExtra = {}
+
+    if (ext === '.pdf') {
+      const text = await extractPdfText(filePath)
+      chunks = chunkingService.chunkDoc(text, originalname)
+    } else {
+      const text     = fs.readFileSync(filePath, 'utf8')
+      const midiJson = detectMidiJson(text)
+
+      if (midiJson) {
+        console.log(`[ingest] MIDI JSON in "${originalname}" → deep analysis`)
+
+        // Store exact untouched JSON in Turso tracks table
+        await knowledgeService.saveExactJson(originalname, text.trim(), {
+          key: midiJson.key, tempo: midiJson.tempo, bars: midiJson.bars?.length,
+        })
+
+        chunks = chunkingService.chunkMidi(midiJson, originalname)
+        responseExtra = { type: 'midi', key: midiJson.key || 'C', tempo: midiJson.tempo || 120 }
+      } else {
+        chunks = chunkingService.chunkDoc(text, originalname)
+      }
+    }
+
+    // Save to BOTH stores (Turso + Pinecone)
+    await saveToBothStores(chunks, originalname)
+
+    fs.unlink(filePath, () => {})
+
+    res.json({
+      success: true,
+      name:    originalname,
+      type:    responseExtra.type || 'doc',
+      chunks:  chunks.length,
+      date:    'Just now',
+      ...responseExtra,
+    })
+  } catch (err) { next(err) }
+}
+
+// ── PDF text extraction ───────────────────────────────────────────────────────
+async function extractPdfText(filePath) {
+  const buf = fs.readFileSync(filePath)
+  const str = buf.toString('latin1')
+  const out = []
+  const re  = /stream\r?\n([\s\S]*?)\r?\nendstream/g
+  let m
+  while ((m = re.exec(str)) !== null) {
+    const readable = m[1].replace(/[^\x20-\x7E\n]/g, ' ').replace(/\s+/g, ' ').trim()
+    if (readable.length > 20) out.push(readable)
+  }
+  return out.join('\n\n') || '[Could not extract PDF text]'
+}
+
+module.exports = { ingestMidi, ingestDoc }

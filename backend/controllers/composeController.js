@@ -1225,323 +1225,24 @@
 
 
 
-'use strict'
-// backend/controllers/composeController.js  v3.0
-//
-// ── WHAT CHANGED FROM v2.0 ────────────────────────────────────────────────────
-//  - REMOVED getAllContext() — was dumping 90+ tracks (~240KB) into prompt.
-//    LLM couldn't focus on anything → generic up-down scale output.
-//
-//  - NEW: getFocusedContext(prompt, topK=5) — fetches ALL chunk types
-//    (metadata, note_pattern, style, structure) for the TOP 5 most relevant
-//    tracks only. ~15–25KB of highly relevant context instead of 240KB noise.
-//
-//  - note_pattern chunks now arrive FIRST in context (most important).
-//    metadata + style + structure follow as support context.
-//
-//  - Pattern extraction instructions stay prominent in effectivePrompt.
-//
-//  - enhancePrompt (geminiService) is bypassed by passing the prompt directly
-//    through buildComposePromptDirect() which skips the blueprint expansion.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const path = require('path')
-const fs   = require('fs')
-
-function uuid() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-  })
-}
-
-const knowledgeService  = require('../services/knowledgeService')
-const geminiService     = require('../services/geminiService')
-const claudeService     = require('../services/claudeService')
-const validationService = require('../services/validationService')
-const stitchService     = require('../services/stitchService')
-const jsonToMidi        = require('../services/converters/jsonToMidi')
-const { getDb }         = require('../db/database')
-
-const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
-
-// Keywords that signal "give me the exact original file"
-const EXACT_KEYWORDS = [
-  'give me the exact',
-  'return the exact',
-  'exact copy',
-  'exact original',
-  'reproduce exactly',
-  'verbatim',
-  'copy of the original',
-  'give me the original track',
-  'return the original',
-]
-
-function wantsExact(prompt) {
-  const lower = prompt.toLowerCase()
-  return EXACT_KEYWORDS.some(kw => lower.includes(kw))
-}
-
-// ── NEW: getFocusedContext ─────────────────────────────────────────────────────
-// Gets ALL chunk types for the TOP topK style-matched tracks.
-// Returns a structured context string with note_patterns FIRST.
-// ~15–25KB focused context vs 240KB+ context bomb from getAllContext().
-async function getFocusedContext(prompt, topK = 5) {
-  const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
-  if (!styleMatches || styleMatches.length === 0) {
-    console.log('[compose] No style matches found — composing without reference context')
-    return { ragText: '', matchedSources: [] }
-  }
-
-  console.log(`[compose] Focused context from ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
-
-  const db = getDb()
-  const parts = []
-
-  for (const src of styleMatches) {
-    const rows = await db.prepare(`
-      SELECT summary, chunk_type
-      FROM knowledge
-      WHERE source_file = ?
-      AND summary IS NOT NULL AND length(summary) > 10
-      ORDER BY
-        CASE chunk_type
-          WHEN 'note_pattern_rh'   THEN 1
-          WHEN 'note_pattern_lh'   THEN 2
-          WHEN 'note_pattern_full' THEN 3
-          WHEN 'metadata'          THEN 4
-          WHEN 'style'             THEN 5
-          WHEN 'structure'         THEN 6
-          ELSE 7
-        END,
-        id ASC
-    `).all(src)
-
-    if (!rows || rows.length === 0) continue
-
-    const sections = rows.map(r => r.summary).join('\n\n')
-    parts.push(`\n${'═'.repeat(60)}\nREFERENCE TRACK: "${src}"\n${'═'.repeat(60)}\n${sections}`)
-  }
-
-  return {
-    ragText: parts.join('\n\n'),
-    matchedSources: styleMatches,
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function compose(req, res, next) {
-  try {
-    const { prompt, section, model } = req.body
-
-    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
-      return res.status(400).json({ error: 'prompt is required' })
-    }
-
-    const isOpus     = model === 'opus'
-    const aiService  = isOpus ? claudeService : geminiService
-    const modelLabel = isOpus ? 'opus' : 'aria'
-
-    // ── STEP 1: Try to find an exact matching track ────────────────────────
-    let exactSource  = null
-    let exactJsonStr = null
-    try {
-      exactSource = await knowledgeService.findExactTrack(prompt.trim())
-      if (exactSource) {
-        exactJsonStr = await knowledgeService.getExactJson(exactSource)
-      }
-    } catch (e) {
-      console.warn('[compose] Exact lookup failed:', e.message)
-    }
-
-    // ── STEP 2: If exact match + user wants exact → return directly ────────
-    if (exactJsonStr && wantsExact(prompt)) {
-      try {
-        const parsedExact = JSON.parse(exactJsonStr)
-        const midiBytes   = jsonToMidi.convert(parsedExact)
-        const filename    = `composition_${uuid()}.mid`
-        const filePath    = path.join(OUTPUTS_DIR, filename)
-        fs.writeFileSync(filePath, Buffer.from(midiBytes))
-
-        const db        = getDb()
-        const totalBars = parsedExact.bars?.length || 0
-        const result    = await db.prepare(`
-          INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
-
-        console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
-        return res.json({
-          id:          result.lastInsertRowid,
-          midiUrl:     `/outputs/${filename}`,
-          filename,
-          key:         parsedExact.key   || 'C',
-          tempo:       parsedExact.tempo || 120,
-          bars:        totalBars,
-          model:       'exact',
-          exactSource,
-          metadata: {
-            time_signature:       parsedExact.time_signature,
-            subdivisions_per_bar: parsedExact.subdivisions_per_bar,
-          },
-        })
-      } catch (e) {
-        console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
-      }
-    }
-
-    // ── STEP 3: Get FOCUSED context (top 5 style-matched tracks only) ──────
-    // REPLACES getAllContext() which was dumping 90+ tracks = 240KB context bomb.
-    // getFocusedContext returns 15–25KB of highly relevant, ordered content.
-    let ragText        = ''
-    let matchedSources = []
-    try {
-      const focused  = await getFocusedContext(prompt.trim(), 5)
-      ragText        = focused.ragText
-      matchedSources = focused.matchedSources
-    } catch (e) {
-      console.warn('[compose] getFocusedContext failed:', e.message)
-    }
-
-    // ── STEP 4: Build ragChunks array for AI services ──────────────────────
-    // Pass focused context as a single well-structured chunk.
-    // AI services use this in formatRagContext() inside compose prompt.
-    const ragChunks = ragText
-      ? [{ text: ragText, type: 'note_patterns_focused', source: matchedSources.join(', '), score: 1.0 }]
-      : []
-
-    // ── STEP 5: Build effective prompt ────────────────────────────────────
-    // Only inject style metadata from exact match — note patterns already in ragChunks.
-    let effectivePrompt = prompt.trim()
-
-    if (exactJsonStr && exactSource) {
-      try {
-        const p = JSON.parse(exactJsonStr)
-        const metaContext = [
-          `\nSTYLE REFERENCE — "${exactSource}":`,
-          `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
-          `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
-          `Use the note_pattern chunks (already in context) as structural reference only.`,
-          `Generate completely new, original notes — do NOT reproduce the reference.`,
-        ].join('\n')
-        effectivePrompt = `${effectivePrompt}\n\n${metaContext}`
-      } catch (_) {}
-    }
-
-    // ── STEP 6: Generate ──────────────────────────────────────────────────
-    let generationJson
-
-    if (section && Number.isInteger(section) && section > 1) {
-      // Multi-section generation
-      const sections = []
-      for (let i = 1; i <= section; i++) {
-        const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
-          sectionIndex:    i,
-          totalSections:   section,
-          previousSection: sections[i - 2] || null,
-        })
-        const validated = validationService.validate(sectionJson)
-        if (!validated.ok) {
-          const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
-          const revalidated = validationService.validate(retried)
-          if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-          sections.push(retried)
-        } else {
-          sections.push(sectionJson)
-        }
-      }
-      generationJson = stitchService.merge(sections)
-    } else {
-      // Single generation
-      const raw       = await aiService.compose(effectivePrompt, ragChunks)
-      const validated = validationService.validate(raw)
-      if (!validated.ok) {
-        const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
-        const revalidated = validationService.validate(retried)
-        if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
-        generationJson = retried
-      } else {
-        generationJson = raw
-      }
-    }
-
-    // ── STEP 7: Save and respond ──────────────────────────────────────────
-    const midiBytes = jsonToMidi.convert(generationJson)
-    const filename  = `composition_${uuid()}.mid`
-    const filePath  = path.join(OUTPUTS_DIR, filename)
-    fs.writeFileSync(filePath, Buffer.from(midiBytes))
-
-    const db        = getDb()
-    const totalBars = generationJson.bars?.length || 0
-    const result    = await db.prepare(`
-      INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      prompt.trim(), filePath, JSON.stringify(generationJson),
-      generationJson.tempo || 120, generationJson.key || 'C', totalBars,
-    )
-
-    res.json({
-      id:           result.lastInsertRowid,
-      midiUrl:      `/outputs/${filename}`,
-      filename,
-      key:          generationJson.key   || 'C',
-      tempo:        generationJson.tempo || 120,
-      bars:         totalBars,
-      model:        modelLabel,
-      exactSource:  exactSource || null,
-      styleMatches: matchedSources,
-      metadata: {
-        time_signature:       generationJson.time_signature,
-        subdivisions_per_bar: generationJson.subdivisions_per_bar,
-      },
-    })
-  } catch (err) {
-    next(err)
-  }
-}
-
-module.exports = { compose }
-
-
-
-
-
-
-
-
-
-
-
-
 // 'use strict'
-// // backend/controllers/composeController.js  — RAG VERSION
+// // backend/controllers/composeController.js  v3.0
 // //
-// // ── WHAT CHANGED ──────────────────────────────────────────────────────────────
-// //  BEFORE: getFocusedContext() → keyword scoring → SQL text rows
-// //  NOW:    ragService.query()  → Voyage AI embedding → Pinecone semantic search
+// // ── WHAT CHANGED FROM v2.0 ────────────────────────────────────────────────────
+// //  - REMOVED getAllContext() — was dumping 90+ tracks (~240KB) into prompt.
+// //    LLM couldn't focus on anything → generic up-down scale output.
 // //
-// //  Flow:
-// //    1. Embed user prompt with Voyage AI ("dark melancholic slow piano" → vector)
-// //    2. Search Pinecone for nearest 20 chunk vectors
-// //    3. Get back the most semantically relevant note_pattern, style, metadata chunks
-// //    4. Inject into compose prompt
+// //  - NEW: getFocusedContext(prompt, topK=5) — fetches ALL chunk types
+// //    (metadata, note_pattern, style, structure) for the TOP 5 most relevant
+// //    tracks only. ~15–25KB of highly relevant context instead of 240KB noise.
 // //
-// //  Why this is better than keyword scoring:
-// //    - "melancholic and sparse" matches a track named "track_047.json" if its
-// //      note_pattern chunk describes sparse, slow, minor-key patterns
-// //    - Keyword scoring requires the filename to contain "melancholic" or "sparse"
-// //    - Semantic search understands meaning — finds the RIGHT reference tracks
+// //  - note_pattern chunks now arrive FIRST in context (most important).
+// //    metadata + style + structure follow as support context.
 // //
-// //  Fallback:
-// //    If Pinecone query fails (API down, not configured), falls back to
-// //    getFocusedContext() which uses keyword scoring from Turso.
-// //    System never breaks — just gets less accurate retrieval.
+// //  - Pattern extraction instructions stay prominent in effectivePrompt.
 // //
-// //  Required env vars (same as ingestController):
-// //    VOYAGE_API_KEY, PINECONE_API_KEY, PINECONE_INDEX
+// //  - enhancePrompt (geminiService) is bypassed by passing the prompt directly
+// //    through buildComposePromptDirect() which skips the blueprint expansion.
 // // ─────────────────────────────────────────────────────────────────────────────
 
 // const path = require('path')
@@ -1555,7 +1256,6 @@ module.exports = { compose }
 // }
 
 // const knowledgeService  = require('../services/knowledgeService')
-// const ragService        = require('../services/ragService')
 // const geminiService     = require('../services/geminiService')
 // const claudeService     = require('../services/claudeService')
 // const validationService = require('../services/validationService')
@@ -1565,90 +1265,68 @@ module.exports = { compose }
 
 // const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
 
-// // ── Exact match keywords ───────────────────────────────────────────────────────
+// // Keywords that signal "give me the exact original file"
 // const EXACT_KEYWORDS = [
-//   'give me the exact', 'return the exact', 'exact copy',
-//   'exact original', 'reproduce exactly', 'verbatim',
-//   'copy of the original', 'give me the original track', 'return the original',
+//   'give me the exact',
+//   'return the exact',
+//   'exact copy',
+//   'exact original',
+//   'reproduce exactly',
+//   'verbatim',
+//   'copy of the original',
+//   'give me the original track',
+//   'return the original',
 // ]
+
 // function wantsExact(prompt) {
 //   const lower = prompt.toLowerCase()
 //   return EXACT_KEYWORDS.some(kw => lower.includes(kw))
 // }
 
-// // ── Semantic retrieval with keyword fallback ───────────────────────────────────
-// // Primary:  ragService.query() — Voyage AI embeds prompt → Pinecone cosine search
-// // Fallback: getFocusedContext() — keyword scoring from Turso
-// //
-// // topK=20 means 20 chunks. With 4 chunks per track that is ~5 tracks of context.
-// // note_pattern chunks score highest because they contain real musical structure
-// // that semantically matches style descriptions.
-// async function getSemanticContext(prompt, topK = 20) {
-//   try {
-//     const chunks = await ragService.query(prompt, topK)
-
-//     if (chunks && chunks.length > 0) {
-//       console.log(`[compose] ✔ Pinecone semantic search → ${chunks.length} chunks`)
-
-//       // Sort so note_pattern chunks come first — most important for composition
-//       const sorted = [
-//         ...chunks.filter(c => c.type?.includes('note_pattern')),
-//         ...chunks.filter(c => c.type === 'metadata'),
-//         ...chunks.filter(c => c.type === 'style'),
-//         ...chunks.filter(c => c.type === 'structure'),
-//         ...chunks.filter(c => !['metadata','style','structure'].includes(c.type) && !c.type?.includes('note_pattern')),
-//       ]
-
-//       return sorted
-//     }
-
-//     console.log('[compose] ⚠ Pinecone returned 0 results — using keyword fallback')
-//     return await getKeywordFallback(prompt)
-//   } catch (e) {
-//     console.warn(`[compose] ⚠ Pinecone query failed: ${e.message} — using keyword fallback`)
-//     return await getKeywordFallback(prompt)
+// // ── NEW: getFocusedContext ─────────────────────────────────────────────────────
+// // Gets ALL chunk types for the TOP topK style-matched tracks.
+// // Returns a structured context string with note_patterns FIRST.
+// // ~15–25KB focused context vs 240KB+ context bomb from getAllContext().
+// async function getFocusedContext(prompt, topK = 5) {
+//   const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
+//   if (!styleMatches || styleMatches.length === 0) {
+//     console.log('[compose] No style matches found — composing without reference context')
+//     return { ragText: '', matchedSources: [] }
 //   }
-// }
 
-// // ── Keyword fallback (original getFocusedContext logic) ────────────────────────
-// // Used when Pinecone is unavailable. Less accurate but always works.
-// async function getKeywordFallback(prompt, topK = 5) {
-//   try {
-//     const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
-//     if (!styleMatches || styleMatches.length === 0) return []
+//   console.log(`[compose] Focused context from ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
 
-//     console.log(`[compose] Keyword fallback → ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
+//   const db = getDb()
+//   const parts = []
 
-//     const db    = getDb()
-//     const parts = []
+//   for (const src of styleMatches) {
+//     const rows = await db.prepare(`
+//       SELECT summary, chunk_type
+//       FROM knowledge
+//       WHERE source_file = ?
+//       AND summary IS NOT NULL AND length(summary) > 10
+//       ORDER BY
+//         CASE chunk_type
+//           WHEN 'note_pattern_rh'   THEN 1
+//           WHEN 'note_pattern_lh'   THEN 2
+//           WHEN 'note_pattern_full' THEN 3
+//           WHEN 'metadata'          THEN 4
+//           WHEN 'style'             THEN 5
+//           WHEN 'structure'         THEN 6
+//           ELSE 7
+//         END,
+//         id ASC
+//     `).all(src)
 
-//     for (const src of styleMatches) {
-//       const rows = await db.prepare(`
-//         SELECT summary AS text, chunk_type AS type, source_file AS source
-//         FROM knowledge
-//         WHERE source_file = ?
-//         AND summary IS NOT NULL AND length(summary) > 10
-//         ORDER BY
-//           CASE chunk_type
-//             WHEN 'note_pattern_rh'   THEN 1
-//             WHEN 'note_pattern_lh'   THEN 2
-//             WHEN 'note_pattern_full' THEN 3
-//             WHEN 'metadata'          THEN 4
-//             WHEN 'style'             THEN 5
-//             WHEN 'structure'         THEN 6
-//             ELSE 7
-//           END, id ASC
-//       `).all(src)
+//     if (!rows || rows.length === 0) continue
 
-//       for (const row of (rows || [])) {
-//         parts.push({ text: row.text, type: row.type, source: row.source, score: 0.8 })
-//       }
-//     }
+//     const sections = rows.map(r => r.summary).join('\n\n')
+//     parts.push(`\n${'═'.repeat(60)}\nREFERENCE TRACK: "${src}"\n${'═'.repeat(60)}\n${sections}`)
+//   }
 
-//     return parts
-//   } catch (e) {
-//     console.warn(`[compose] Keyword fallback also failed: ${e.message}`)
-//     return []
+//   return {
+//     ragText: parts.join('\n\n'),
+//     matchedSources: styleMatches,
 //   }
 // }
 
@@ -1666,17 +1344,19 @@ module.exports = { compose }
 //     const aiService  = isOpus ? claudeService : geminiService
 //     const modelLabel = isOpus ? 'opus' : 'aria'
 
-//     // ── STEP 1: Exact track lookup ─────────────────────────────────────────
+//     // ── STEP 1: Try to find an exact matching track ────────────────────────
 //     let exactSource  = null
 //     let exactJsonStr = null
 //     try {
 //       exactSource = await knowledgeService.findExactTrack(prompt.trim())
-//       if (exactSource) exactJsonStr = await knowledgeService.getExactJson(exactSource)
+//       if (exactSource) {
+//         exactJsonStr = await knowledgeService.getExactJson(exactSource)
+//       }
 //     } catch (e) {
 //       console.warn('[compose] Exact lookup failed:', e.message)
 //     }
 
-//     // ── STEP 2: Return exact JSON if requested ─────────────────────────────
+//     // ── STEP 2: If exact match + user wants exact → return directly ────────
 //     if (exactJsonStr && wantsExact(prompt)) {
 //       try {
 //         const parsedExact = JSON.parse(exactJsonStr)
@@ -1692,7 +1372,7 @@ module.exports = { compose }
 //           VALUES (?, ?, ?, ?, ?, ?)
 //         `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
 
-//         console.log(`[compose] EXACT MODE → "${exactSource}"`)
+//         console.log(`[compose] EXACT MODE — returning stored JSON for "${exactSource}"`)
 //         return res.json({
 //           id:          result.lastInsertRowid,
 //           midiUrl:     `/outputs/${filename}`,
@@ -1708,37 +1388,53 @@ module.exports = { compose }
 //           },
 //         })
 //       } catch (e) {
-//         console.warn('[compose] Exact convert failed, falling through:', e.message)
+//         console.warn('[compose] Exact JSON convert failed, falling through:', e.message)
 //       }
 //     }
 
-//     // ── STEP 3: Semantic search in Pinecone (with keyword fallback) ────────
-//     // This is the real RAG step.
-//     // "dark melancholic slow piano in Am" → embedding → nearest 20 chunks
-//     // Returns note_pattern + style + metadata chunks from the most relevant tracks.
-//     const ragChunks = await getSemanticContext(prompt.trim(), 20)
+//     // ── STEP 3: Get FOCUSED context (top 5 style-matched tracks only) ──────
+//     // REPLACES getAllContext() which was dumping 90+ tracks = 240KB context bomb.
+//     // getFocusedContext returns 15–25KB of highly relevant, ordered content.
+//     let ragText        = ''
+//     let matchedSources = []
+//     try {
+//       const focused  = await getFocusedContext(prompt.trim(), 5)
+//       ragText        = focused.ragText
+//       matchedSources = focused.matchedSources
+//     } catch (e) {
+//       console.warn('[compose] getFocusedContext failed:', e.message)
+//     }
 
-//     // ── STEP 4: Build effective prompt ─────────────────────────────────────
+//     // ── STEP 4: Build ragChunks array for AI services ──────────────────────
+//     // Pass focused context as a single well-structured chunk.
+//     // AI services use this in formatRagContext() inside compose prompt.
+//     const ragChunks = ragText
+//       ? [{ text: ragText, type: 'note_patterns_focused', source: matchedSources.join(', '), score: 1.0 }]
+//       : []
+
+//     // ── STEP 5: Build effective prompt ────────────────────────────────────
+//     // Only inject style metadata from exact match — note patterns already in ragChunks.
 //     let effectivePrompt = prompt.trim()
 
-//     // Add style metadata from exact match if found
 //     if (exactJsonStr && exactSource) {
 //       try {
 //         const p = JSON.parse(exactJsonStr)
-//         effectivePrompt += [
-//           `\n\nSTYLE REFERENCE — "${exactSource}":`,
+//         const metaContext = [
+//           `\nSTYLE REFERENCE — "${exactSource}":`,
 //           `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
 //           `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
-//           `Note patterns from this track are already in your reference context.`,
+//           `Use the note_pattern chunks (already in context) as structural reference only.`,
 //           `Generate completely new, original notes — do NOT reproduce the reference.`,
 //         ].join('\n')
+//         effectivePrompt = `${effectivePrompt}\n\n${metaContext}`
 //       } catch (_) {}
 //     }
 
-//     // ── STEP 5: Generate ───────────────────────────────────────────────────
+//     // ── STEP 6: Generate ──────────────────────────────────────────────────
 //     let generationJson
 
 //     if (section && Number.isInteger(section) && section > 1) {
+//       // Multi-section generation
 //       const sections = []
 //       for (let i = 1; i <= section; i++) {
 //         const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
@@ -1758,6 +1454,7 @@ module.exports = { compose }
 //       }
 //       generationJson = stitchService.merge(sections)
 //     } else {
+//       // Single generation
 //       const raw       = await aiService.compose(effectivePrompt, ragChunks)
 //       const validated = validationService.validate(raw)
 //       if (!validated.ok) {
@@ -1770,7 +1467,7 @@ module.exports = { compose }
 //       }
 //     }
 
-//     // ── STEP 6: Save and respond ───────────────────────────────────────────
+//     // ── STEP 7: Save and respond ──────────────────────────────────────────
 //     const midiBytes = jsonToMidi.convert(generationJson)
 //     const filename  = `composition_${uuid()}.mid`
 //     const filePath  = path.join(OUTPUTS_DIR, filename)
@@ -1795,7 +1492,7 @@ module.exports = { compose }
 //       bars:         totalBars,
 //       model:        modelLabel,
 //       exactSource:  exactSource || null,
-//       retrieval:    ragChunks.length > 0 ? 'semantic' : 'none',
+//       styleMatches: matchedSources,
 //       metadata: {
 //         time_signature:       generationJson.time_signature,
 //         subdivisions_per_bar: generationJson.subdivisions_per_bar,
@@ -1807,3 +1504,306 @@ module.exports = { compose }
 // }
 
 // module.exports = { compose }
+
+
+
+
+
+
+
+
+
+
+
+
+'use strict'
+// backend/controllers/composeController.js  — RAG VERSION
+//
+// ── WHAT CHANGED ──────────────────────────────────────────────────────────────
+//  BEFORE: getFocusedContext() → keyword scoring → SQL text rows
+//  NOW:    ragService.query()  → Voyage AI embedding → Pinecone semantic search
+//
+//  Flow:
+//    1. Embed user prompt with Voyage AI ("dark melancholic slow piano" → vector)
+//    2. Search Pinecone for nearest 20 chunk vectors
+//    3. Get back the most semantically relevant note_pattern, style, metadata chunks
+//    4. Inject into compose prompt
+//
+//  Why this is better than keyword scoring:
+//    - "melancholic and sparse" matches a track named "track_047.json" if its
+//      note_pattern chunk describes sparse, slow, minor-key patterns
+//    - Keyword scoring requires the filename to contain "melancholic" or "sparse"
+//    - Semantic search understands meaning — finds the RIGHT reference tracks
+//
+//  Fallback:
+//    If Pinecone query fails (API down, not configured), falls back to
+//    getFocusedContext() which uses keyword scoring from Turso.
+//    System never breaks — just gets less accurate retrieval.
+//
+//  Required env vars (same as ingestController):
+//    VOYAGE_API_KEY, PINECONE_API_KEY, PINECONE_INDEX
+// ─────────────────────────────────────────────────────────────────────────────
+
+const path = require('path')
+const fs   = require('fs')
+
+function uuid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
+const knowledgeService  = require('../services/knowledgeService')
+const ragService        = require('../services/ragService')
+const geminiService     = require('../services/geminiService')
+const claudeService     = require('../services/claudeService')
+const validationService = require('../services/validationService')
+const stitchService     = require('../services/stitchService')
+const jsonToMidi        = require('../services/converters/jsonToMidi')
+const { getDb }         = require('../db/database')
+
+const OUTPUTS_DIR = process.env.OUTPUTS_DIR || './outputs'
+
+// ── Exact match keywords ───────────────────────────────────────────────────────
+const EXACT_KEYWORDS = [
+  'give me the exact', 'return the exact', 'exact copy',
+  'exact original', 'reproduce exactly', 'verbatim',
+  'copy of the original', 'give me the original track', 'return the original',
+]
+function wantsExact(prompt) {
+  const lower = prompt.toLowerCase()
+  return EXACT_KEYWORDS.some(kw => lower.includes(kw))
+}
+
+// ── Semantic retrieval with keyword fallback ───────────────────────────────────
+// Primary:  ragService.query() — Voyage AI embeds prompt → Pinecone cosine search
+// Fallback: getFocusedContext() — keyword scoring from Turso
+//
+// topK=20 means 20 chunks. With 4 chunks per track that is ~5 tracks of context.
+// note_pattern chunks score highest because they contain real musical structure
+// that semantically matches style descriptions.
+async function getSemanticContext(prompt, topK = 20) {
+  try {
+    const chunks = await ragService.query(prompt, topK)
+
+    if (chunks && chunks.length > 0) {
+      console.log(`[compose] ✔ Pinecone semantic search → ${chunks.length} chunks`)
+
+      // Sort so note_pattern chunks come first — most important for composition
+      const sorted = [
+        ...chunks.filter(c => c.type?.includes('note_pattern')),
+        ...chunks.filter(c => c.type === 'metadata'),
+        ...chunks.filter(c => c.type === 'style'),
+        ...chunks.filter(c => c.type === 'structure'),
+        ...chunks.filter(c => !['metadata','style','structure'].includes(c.type) && !c.type?.includes('note_pattern')),
+      ]
+
+      return sorted
+    }
+
+    console.log('[compose] ⚠ Pinecone returned 0 results — using keyword fallback')
+    return await getKeywordFallback(prompt)
+  } catch (e) {
+    console.warn(`[compose] ⚠ Pinecone query failed: ${e.message} — using keyword fallback`)
+    return await getKeywordFallback(prompt)
+  }
+}
+
+// ── Keyword fallback (original getFocusedContext logic) ────────────────────────
+// Used when Pinecone is unavailable. Less accurate but always works.
+async function getKeywordFallback(prompt, topK = 5) {
+  try {
+    const styleMatches = await knowledgeService.findStyleMatches(prompt.trim(), topK)
+    if (!styleMatches || styleMatches.length === 0) return []
+
+    console.log(`[compose] Keyword fallback → ${styleMatches.length} tracks: ${styleMatches.join(', ')}`)
+
+    const db    = getDb()
+    const parts = []
+
+    for (const src of styleMatches) {
+      const rows = await db.prepare(`
+        SELECT summary AS text, chunk_type AS type, source_file AS source
+        FROM knowledge
+        WHERE source_file = ?
+        AND summary IS NOT NULL AND length(summary) > 10
+        ORDER BY
+          CASE chunk_type
+            WHEN 'note_pattern_rh'   THEN 1
+            WHEN 'note_pattern_lh'   THEN 2
+            WHEN 'note_pattern_full' THEN 3
+            WHEN 'metadata'          THEN 4
+            WHEN 'style'             THEN 5
+            WHEN 'structure'         THEN 6
+            ELSE 7
+          END, id ASC
+      `).all(src)
+
+      for (const row of (rows || [])) {
+        parts.push({ text: row.text, type: row.type, source: row.source, score: 0.8 })
+      }
+    }
+
+    return parts
+  } catch (e) {
+    console.warn(`[compose] Keyword fallback also failed: ${e.message}`)
+    return []
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function compose(req, res, next) {
+  try {
+    const { prompt, section, model } = req.body
+
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return res.status(400).json({ error: 'prompt is required' })
+    }
+
+    const isOpus     = model === 'opus'
+    const aiService  = isOpus ? claudeService : geminiService
+    const modelLabel = isOpus ? 'opus' : 'aria'
+
+    // ── STEP 1: Exact track lookup ─────────────────────────────────────────
+    let exactSource  = null
+    let exactJsonStr = null
+    try {
+      exactSource = await knowledgeService.findExactTrack(prompt.trim())
+      if (exactSource) exactJsonStr = await knowledgeService.getExactJson(exactSource)
+    } catch (e) {
+      console.warn('[compose] Exact lookup failed:', e.message)
+    }
+
+    // ── STEP 2: Return exact JSON if requested ─────────────────────────────
+    if (exactJsonStr && wantsExact(prompt)) {
+      try {
+        const parsedExact = JSON.parse(exactJsonStr)
+        const midiBytes   = jsonToMidi.convert(parsedExact)
+        const filename    = `composition_${uuid()}.mid`
+        const filePath    = path.join(OUTPUTS_DIR, filename)
+        fs.writeFileSync(filePath, Buffer.from(midiBytes))
+
+        const db        = getDb()
+        const totalBars = parsedExact.bars?.length || 0
+        const result    = await db.prepare(`
+          INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(prompt.trim(), filePath, exactJsonStr, parsedExact.tempo || 120, parsedExact.key || 'C', totalBars)
+
+        console.log(`[compose] EXACT MODE → "${exactSource}"`)
+        return res.json({
+          id:          result.lastInsertRowid,
+          midiUrl:     `/outputs/${filename}`,
+          filename,
+          key:         parsedExact.key   || 'C',
+          tempo:       parsedExact.tempo || 120,
+          bars:        totalBars,
+          model:       'exact',
+          exactSource,
+          metadata: {
+            time_signature:       parsedExact.time_signature,
+            subdivisions_per_bar: parsedExact.subdivisions_per_bar,
+          },
+        })
+      } catch (e) {
+        console.warn('[compose] Exact convert failed, falling through:', e.message)
+      }
+    }
+
+    // ── STEP 3: Semantic search in Pinecone (with keyword fallback) ────────
+    // This is the real RAG step.
+    // "dark melancholic slow piano in Am" → embedding → nearest 20 chunks
+    // Returns note_pattern + style + metadata chunks from the most relevant tracks.
+    const ragChunks = await getSemanticContext(prompt.trim(), 20)
+
+    // ── STEP 4: Build effective prompt ─────────────────────────────────────
+    let effectivePrompt = prompt.trim()
+
+    // Add style metadata from exact match if found
+    if (exactJsonStr && exactSource) {
+      try {
+        const p = JSON.parse(exactJsonStr)
+        effectivePrompt += [
+          `\n\nSTYLE REFERENCE — "${exactSource}":`,
+          `Key: ${p.key}, Tempo: ${p.tempo} BPM, Bars: ${p.bars?.length}, Time: ${p.time_signature}.`,
+          `Compose an ORIGINAL piece INSPIRED BY this track's style.`,
+          `Note patterns from this track are already in your reference context.`,
+          `Generate completely new, original notes — do NOT reproduce the reference.`,
+        ].join('\n')
+      } catch (_) {}
+    }
+
+    // ── STEP 5: Generate ───────────────────────────────────────────────────
+    let generationJson
+
+    if (section && Number.isInteger(section) && section > 1) {
+      const sections = []
+      for (let i = 1; i <= section; i++) {
+        const sectionJson = await aiService.compose(effectivePrompt, ragChunks, {
+          sectionIndex:    i,
+          totalSections:   section,
+          previousSection: sections[i - 2] || null,
+        })
+        const validated = validationService.validate(sectionJson)
+        if (!validated.ok) {
+          const retried     = await aiService.retry(effectivePrompt, ragChunks, sectionJson, validated.errors)
+          const revalidated = validationService.validate(retried)
+          if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+          sections.push(retried)
+        } else {
+          sections.push(sectionJson)
+        }
+      }
+      generationJson = stitchService.merge(sections)
+    } else {
+      const raw       = await aiService.compose(effectivePrompt, ragChunks)
+      const validated = validationService.validate(raw)
+      if (!validated.ok) {
+        const retried     = await aiService.retry(effectivePrompt, ragChunks, raw, validated.errors)
+        const revalidated = validationService.validate(retried)
+        if (!revalidated.ok) throw new Error(`Validation failed: ${revalidated.errors.join(', ')}`)
+        generationJson = retried
+      } else {
+        generationJson = raw
+      }
+    }
+
+    // ── STEP 6: Save and respond ───────────────────────────────────────────
+    const midiBytes = jsonToMidi.convert(generationJson)
+    const filename  = `composition_${uuid()}.mid`
+    const filePath  = path.join(OUTPUTS_DIR, filename)
+    fs.writeFileSync(filePath, Buffer.from(midiBytes))
+
+    const db        = getDb()
+    const totalBars = generationJson.bars?.length || 0
+    const result    = await db.prepare(`
+      INSERT INTO history (prompt, midi_path, json_data, tempo, key, bars)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      prompt.trim(), filePath, JSON.stringify(generationJson),
+      generationJson.tempo || 120, generationJson.key || 'C', totalBars,
+    )
+
+    res.json({
+      id:           result.lastInsertRowid,
+      midiUrl:      `/outputs/${filename}`,
+      filename,
+      key:          generationJson.key   || 'C',
+      tempo:        generationJson.tempo || 120,
+      bars:         totalBars,
+      model:        modelLabel,
+      exactSource:  exactSource || null,
+      retrieval:    ragChunks.length > 0 ? 'semantic' : 'none',
+      metadata: {
+        time_signature:       generationJson.time_signature,
+        subdivisions_per_bar: generationJson.subdivisions_per_bar,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { compose }
