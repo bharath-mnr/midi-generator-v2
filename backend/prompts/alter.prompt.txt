@@ -19,18 +19,40 @@ THE REQUEST
 {{USER_PROMPT}}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOUR TASK — ADDITIONS ONLY
+MUSIC ARCHITECTURE — RULES FOR ADDING LAYERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Return ONLY the NEW notes to add. Existing notes will be merged automatically.
-Do NOT repeat or duplicate any existing pitches at the same start_subdivision.
 
-Rules for new layers:
+When adding new layers, these laws must govern what you add:
+
+IDENTITY: Your additions must not fight the existing identity. They should SUPPORT or COMPLEMENT the existing motif, not create a competing melodic line.
+
+CONTINUITY: Voice-lead any new inner harmony. Move smoothly from bar to bar. No sudden jumps in new voices.
+
+CONTRAST: If the existing track is dense → add sparse sustained notes. If the existing track is sparse → add gentle inner movement. Never double the existing density without purpose.
+
+REGISTER: Study the existing note pitches. Place new notes in a DIFFERENT register zone than existing notes to avoid mud. If existing notes are in C4–E5, add new notes in C2–B3 (bass) or F5–B6 (high harmony).
+
+ENERGY: Your additions should follow the same energy arc as the existing piece. If bars 1–4 are sparse and bars 9–12 are dense, match that shape.
+
+RHYTHMIC COUNTERFLOW: Do NOT duplicate the existing rhythm exactly. Add rhythmic contrast — if existing notes hit on beats, your additions can use offbeats (s:2, s:6, s:10, s:14) or longer sustained notes.
+
+RULES FOR NEW LAYERS:
 - Stay in key: {{KEY}}
 - Match tempo: {{TEMPO}} BPM, time signature: {{TIME_SIG}}
-- Use registers that complement existing notes
+- Place notes in a DIFFERENT register from existing notes (check existing p values)
 - Voice lead smoothly — avoid parallel fifths or octaves with existing notes
 - Add rhythmic contrast — if existing notes move in quarters, add held or syncopated notes
 - Cover all {{BAR_COUNT}} bars
+- Do NOT place a note at the same pitch AND same start_subdivision as an existing note
+
+WHAT MAKES GOOD ADDITIONS:
+✓ Sustained bass pedal notes under moving melody
+✓ Inner harmony that fills harmonic gaps in existing chords
+✓ Counter-melody in a contrasting register
+✓ Rhythmic offbeat pulse that adds life under the existing rhythm
+✗ NEVER duplicate the existing melody an octave higher (lazy doubling)
+✗ NEVER add scale runs that fight the existing melodic direction
+✗ NEVER add notes in the same register as existing melody (creates mud)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OUTPUT FORMAT — COMPACT JSON
