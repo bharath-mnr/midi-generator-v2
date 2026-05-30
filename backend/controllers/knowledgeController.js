@@ -474,211 +474,211 @@
 
 
 
-// 'use strict'
-// // backend/controllers/knowledgeController.js
-// //
-// // Rewritten to use knowledgeService (Turso) instead of ragService (Pinecone).
-// // All routes work exactly the same — frontend doesn't need any changes.
-// //
-// // GET    /api/knowledge         → list all ingested files
-// // GET    /api/knowledge/stats   → chunk + track counts
-// // DELETE /api/knowledge/all     → delete everything from Turso
-// // DELETE /api/knowledge/by-name/:name → delete one file by filename
-// // DELETE /api/knowledge/:id     → delete one file by row id
-
-// const knowledgeService = require('../services/knowledgeService')
-
-// // ── GET /api/knowledge ────────────────────────────────────────────────────────
-// // Returns list of all ingested source files with metadata.
-// // Used by the Knowledge page to show the file list.
-// async function list(req, res, next) {
-//   try {
-//     const items = await knowledgeService.listSources()
-//     res.json(items)
-//   } catch (err) {
-//     next(err)
-//   }
-// }
-
-// // ── GET /api/knowledge/stats ──────────────────────────────────────────────────
-// // Returns counts for the UI status bar.
-// async function stats(req, res, next) {
-//   try {
-//     const s = await knowledgeService.getStats()
-//     res.json({
-//       turso: {
-//         chunkCount:  s.chunkCount,
-//         trackCount:  s.trackCount,
-//         sourceCount: s.sourceCount,
-//       },
-//     })
-//   } catch (err) {
-//     next(err)
-//   }
-// }
-
-// // ── DELETE /api/knowledge/all ─────────────────────────────────────────────────
-// // Wipes everything — both knowledge chunks and exact JSON tracks.
-// async function removeAll(req, res, next) {
-//   try {
-//     await knowledgeService.deleteAll()
-//     res.json({ success: true })
-//   } catch (err) {
-//     next(err)
-//   }
-// }
-
-// // ── DELETE /api/knowledge/by-name/:name ───────────────────────────────────────
-// // Deletes all chunks + exact JSON for one named source file.
-// // Frontend calls this with the filename URL-encoded.
-// async function removeByName(req, res, next) {
-//   try {
-//     const name = decodeURIComponent(req.params.name)
-//     await knowledgeService.deleteSource(name)
-//     res.json({ success: true, source: name })
-//   } catch (err) {
-//     next(err)
-//   }
-// }
-
-// // ── DELETE /api/knowledge/:id ─────────────────────────────────────────────────
-// // Deletes by row ID — looks up the filename first, then deletes everything
-// // for that source. This is what the frontend calls when user clicks delete.
-// async function remove(req, res, next) {
-//   try {
-//     const { id } = req.params
-
-//     // Look up which source file this ID belongs to
-//     const { getDb } = require('../db/database')
-//     const db  = getDb()
-//     const row = await db.prepare(
-//       'SELECT source_file FROM knowledge WHERE id = ? LIMIT 1'
-//     ).get(id)
-
-//     if (!row) {
-//       return res.status(404).json({ error: 'Not found' })
-//     }
-
-//     await knowledgeService.deleteSource(row.source_file)
-//     res.json({ success: true, source: row.source_file })
-//   } catch (err) {
-//     next(err)
-//   }
-// }
-
-// module.exports = { list, stats, remove, removeByName, removeAll }
-
-
-
-
-
-
-
-
-
-
-
 'use strict'
-// backend/controllers/knowledgeController.js  — RAG VERSION
+// backend/controllers/knowledgeController.js
 //
-// ── WHAT CHANGED ──────────────────────────────────────────────────────────────
-//  Delete operations now remove from BOTH Turso AND Pinecone.
-//  Before: only Turso was cleared → Pinecone vectors became orphaned stale data.
-//  Now:    both stores stay in sync on every delete.
+// Rewritten to use knowledgeService (Turso) instead of ragService (Pinecone).
+// All routes work exactly the same — frontend doesn't need any changes.
 //
-//  Pattern: Turso delete first (always works), then Pinecone delete (best-effort).
-//  If Pinecone delete fails, logs a warning but doesn't fail the request.
-//  The orphaned vectors won't be surfaced after Turso rows are gone.
-// ─────────────────────────────────────────────────────────────────────────────
+// GET    /api/knowledge         → list all ingested files
+// GET    /api/knowledge/stats   → chunk + track counts
+// DELETE /api/knowledge/all     → delete everything from Turso
+// DELETE /api/knowledge/by-name/:name → delete one file by filename
+// DELETE /api/knowledge/:id     → delete one file by row id
 
 const knowledgeService = require('../services/knowledgeService')
-const ragService       = require('../services/ragService')
-
-// ── Helper: delete from both stores ───────────────────────────────────────────
-async function deleteFromBothStores(sourceName) {
-  // 1. Delete from Turso (text store) — always reliable
-  await knowledgeService.deleteSource(sourceName)
-
-  // 2. Delete from Pinecone (vector store) — best effort
-  try {
-    await ragService.deleteBySource(sourceName)
-    console.log(`[knowledge] ✔ Pinecone vectors deleted for "${sourceName}"`)
-  } catch (e) {
-    // Non-fatal — orphaned vectors don't surface without matching Turso rows
-    console.warn(`[knowledge] ⚠ Pinecone delete failed for "${sourceName}": ${e.message}`)
-  }
-}
 
 // ── GET /api/knowledge ────────────────────────────────────────────────────────
+// Returns list of all ingested source files with metadata.
+// Used by the Knowledge page to show the file list.
 async function list(req, res, next) {
   try {
     const items = await knowledgeService.listSources()
     res.json(items)
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 }
 
 // ── GET /api/knowledge/stats ──────────────────────────────────────────────────
+// Returns counts for the UI status bar.
 async function stats(req, res, next) {
   try {
-    const tursoStats   = await knowledgeService.getStats()
-    const pineconeStats = await ragService.getStats().catch(() => ({ vectorCount: 0, configured: false }))
-
+    const s = await knowledgeService.getStats()
     res.json({
       turso: {
-        chunkCount:  tursoStats.chunkCount,
-        trackCount:  tursoStats.trackCount,
-        sourceCount: tursoStats.sourceCount,
-      },
-      pinecone: {
-        vectorCount: pineconeStats.vectorCount,
-        configured:  pineconeStats.configured,
-        dimension:   pineconeStats.dimension,
-        model:       pineconeStats.model,
+        chunkCount:  s.chunkCount,
+        trackCount:  s.trackCount,
+        sourceCount: s.sourceCount,
       },
     })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 }
 
 // ── DELETE /api/knowledge/all ─────────────────────────────────────────────────
+// Wipes everything — both knowledge chunks and exact JSON tracks.
 async function removeAll(req, res, next) {
   try {
-    // Delete from Turso
     await knowledgeService.deleteAll()
-
-    // Delete from Pinecone
-    try {
-      await ragService.deleteAll()
-      console.log('[knowledge] ✔ Pinecone index cleared')
-    } catch (e) {
-      console.warn(`[knowledge] ⚠ Pinecone deleteAll failed: ${e.message}`)
-    }
-
     res.json({ success: true })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 }
 
 // ── DELETE /api/knowledge/by-name/:name ───────────────────────────────────────
+// Deletes all chunks + exact JSON for one named source file.
+// Frontend calls this with the filename URL-encoded.
 async function removeByName(req, res, next) {
   try {
     const name = decodeURIComponent(req.params.name)
-    await deleteFromBothStores(name)
+    await knowledgeService.deleteSource(name)
     res.json({ success: true, source: name })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 }
 
 // ── DELETE /api/knowledge/:id ─────────────────────────────────────────────────
+// Deletes by row ID — looks up the filename first, then deletes everything
+// for that source. This is what the frontend calls when user clicks delete.
 async function remove(req, res, next) {
   try {
     const { id } = req.params
+
+    // Look up which source file this ID belongs to
     const { getDb } = require('../db/database')
     const db  = getDb()
-    const row = await db.prepare('SELECT source_file FROM knowledge WHERE id = ? LIMIT 1').get(id)
+    const row = await db.prepare(
+      'SELECT source_file FROM knowledge WHERE id = ? LIMIT 1'
+    ).get(id)
 
-    if (!row) return res.status(404).json({ error: 'Not found' })
+    if (!row) {
+      return res.status(404).json({ error: 'Not found' })
+    }
 
-    await deleteFromBothStores(row.source_file)
+    await knowledgeService.deleteSource(row.source_file)
     res.json({ success: true, source: row.source_file })
-  } catch (err) { next(err) }
+  } catch (err) {
+    next(err)
+  }
 }
 
 module.exports = { list, stats, remove, removeByName, removeAll }
+
+
+
+
+
+
+
+
+
+
+
+// 'use strict'
+// // backend/controllers/knowledgeController.js  — RAG VERSION
+// //
+// // ── WHAT CHANGED ──────────────────────────────────────────────────────────────
+// //  Delete operations now remove from BOTH Turso AND Pinecone.
+// //  Before: only Turso was cleared → Pinecone vectors became orphaned stale data.
+// //  Now:    both stores stay in sync on every delete.
+// //
+// //  Pattern: Turso delete first (always works), then Pinecone delete (best-effort).
+// //  If Pinecone delete fails, logs a warning but doesn't fail the request.
+// //  The orphaned vectors won't be surfaced after Turso rows are gone.
+// // ─────────────────────────────────────────────────────────────────────────────
+
+// const knowledgeService = require('../services/knowledgeService')
+// const ragService       = require('../services/ragService')
+
+// // ── Helper: delete from both stores ───────────────────────────────────────────
+// async function deleteFromBothStores(sourceName) {
+//   // 1. Delete from Turso (text store) — always reliable
+//   await knowledgeService.deleteSource(sourceName)
+
+//   // 2. Delete from Pinecone (vector store) — best effort
+//   try {
+//     await ragService.deleteBySource(sourceName)
+//     console.log(`[knowledge] ✔ Pinecone vectors deleted for "${sourceName}"`)
+//   } catch (e) {
+//     // Non-fatal — orphaned vectors don't surface without matching Turso rows
+//     console.warn(`[knowledge] ⚠ Pinecone delete failed for "${sourceName}": ${e.message}`)
+//   }
+// }
+
+// // ── GET /api/knowledge ────────────────────────────────────────────────────────
+// async function list(req, res, next) {
+//   try {
+//     const items = await knowledgeService.listSources()
+//     res.json(items)
+//   } catch (err) { next(err) }
+// }
+
+// // ── GET /api/knowledge/stats ──────────────────────────────────────────────────
+// async function stats(req, res, next) {
+//   try {
+//     const tursoStats   = await knowledgeService.getStats()
+//     const pineconeStats = await ragService.getStats().catch(() => ({ vectorCount: 0, configured: false }))
+
+//     res.json({
+//       turso: {
+//         chunkCount:  tursoStats.chunkCount,
+//         trackCount:  tursoStats.trackCount,
+//         sourceCount: tursoStats.sourceCount,
+//       },
+//       pinecone: {
+//         vectorCount: pineconeStats.vectorCount,
+//         configured:  pineconeStats.configured,
+//         dimension:   pineconeStats.dimension,
+//         model:       pineconeStats.model,
+//       },
+//     })
+//   } catch (err) { next(err) }
+// }
+
+// // ── DELETE /api/knowledge/all ─────────────────────────────────────────────────
+// async function removeAll(req, res, next) {
+//   try {
+//     // Delete from Turso
+//     await knowledgeService.deleteAll()
+
+//     // Delete from Pinecone
+//     try {
+//       await ragService.deleteAll()
+//       console.log('[knowledge] ✔ Pinecone index cleared')
+//     } catch (e) {
+//       console.warn(`[knowledge] ⚠ Pinecone deleteAll failed: ${e.message}`)
+//     }
+
+//     res.json({ success: true })
+//   } catch (err) { next(err) }
+// }
+
+// // ── DELETE /api/knowledge/by-name/:name ───────────────────────────────────────
+// async function removeByName(req, res, next) {
+//   try {
+//     const name = decodeURIComponent(req.params.name)
+//     await deleteFromBothStores(name)
+//     res.json({ success: true, source: name })
+//   } catch (err) { next(err) }
+// }
+
+// // ── DELETE /api/knowledge/:id ─────────────────────────────────────────────────
+// async function remove(req, res, next) {
+//   try {
+//     const { id } = req.params
+//     const { getDb } = require('../db/database')
+//     const db  = getDb()
+//     const row = await db.prepare('SELECT source_file FROM knowledge WHERE id = ? LIMIT 1').get(id)
+
+//     if (!row) return res.status(404).json({ error: 'Not found' })
+
+//     await deleteFromBothStores(row.source_file)
+//     res.json({ success: true, source: row.source_file })
+//   } catch (err) { next(err) }
+// }
+
+// module.exports = { list, stats, remove, removeByName, removeAll }
