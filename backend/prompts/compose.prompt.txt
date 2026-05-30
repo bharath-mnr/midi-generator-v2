@@ -15,33 +15,70 @@ The music must feel human — like a real pianist who breathes, pauses, and find
 ⚠ FAILURE #1 — SCALE RUNS (READ THIS BEFORE ANYTHING)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The most common AI failure: stepwise scale runs that go up then down.
-
-FORBIDDEN: C4→D4→E4→F4→G4→F4→E4→D4 repeated every 2 bars.
-This is a piano exercise. It is not music.
+The most common failure: stepwise scale runs going up then down.
+FORBIDDEN: C4→D4→E4→F4→G4→F4→E4→D4 repeated every phrase.
+This is a piano exercise. Not music.
 
 RULE: If melody moves stepwise in one direction for more than 3 notes → STOP.
 Add a rest, a leap, a repeated note, or a direction change.
 
-FORBIDDEN: C5(d=2) D5(d=2) E5(d=2) F5(d=2) G5(d=2) A5(d=2) B5(d=2) C6(d=2)
-[This has no breath, no shape, no identity. Never do this.]
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⚠ FAILURE #2 — NO BREATH (EQUALLY IMPORTANT)
+⚠ FAILURE #2 — SPEED BREAKER RESTS (MOST IMPORTANT FIX)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Every melodic phrase MUST end with a long held note or a silence bar.
-After 4-8 active melody notes, the right hand STOPS on a long note.
-The left hand continues rolling underneath. Then melody re-enters.
+The second most common failure: stopping BOTH hands at once.
+This creates a sudden jarring cut — a "speed breaker" — that destroys flow.
 
-GOOD phrase shape:
-  Bar 1: E5(d=4) D5(d=2) C5(d=2) B4(d=4)   [active — 4 notes]
-  Bar 2: A4(d=8)                              [BREATH — long sustain]
-  Bar 3: C5(d=2) D5(d=2) E5(d=4) G5(d=4)    [re-entry]
-  Bar 4: F5(d=12)                             [BREATH — longer exhale]
+THE GOLDEN RULE OF BREATH:
+  THE LEFT HAND NEVER KNOWS ABOUT BREATH.
+  THE LEFT HAND NEVER STOPS.
+  THE LEFT HAND NEVER PAUSES.
+  THE LEFT HAND KEEPS TICKING THROUGH EVERY SINGLE BAR OF THE PIECE.
 
-Sustain guide: d=4 (short breath) · d=8 (normal breath) · d=12 (long exhale) · d=16 (full bar hold)
-Silence bars (notes:[]) are musical — use 1-2 per 16-bar section.
+Breath is a RIGHT HAND phenomenon only.
+
+When the right hand breathes:
+  - It holds one long note (d=8, d=12, d=15) → the melody rests on a note
+  - OR it plays a simplified sigh gesture (2-4 slow notes)
+  - OR it goes completely silent for 1-2 bars
+  In ALL three cases — the left hand continues its full pattern underneath.
+
+NEVER write { "bn": N, "notes": [] } for a bar where BOTH hands are empty.
+That is a dead stop. It feels like the music crashed.
+
+BREATH TYPES (right hand only — left hand always full pattern):
+
+  TYPE 1 — LONG HOLD (most common):
+    RH: one note held d=8 to d=15 over the full bar
+    LH: continues its normal rolling broken chord pattern
+    Example: RH = A5(s=0, d=15)  |  LH = full 8-note arpeggio as normal
+    This sounds like: melody exhales while the world keeps moving.
+
+  TYPE 2 — CHROMATIC SIGH (Passacaglia-style):
+    RH: a 3-5 note descending chromatic phrase ending on a long hold
+    Example: A5(d=4) G#5(d=2) F#5(d=2) G#5(d=6) A5(d=2) then A5(d=15) next bar
+    LH: continues its normal rolling broken chord pattern
+    This sounds like: a slow exhale with a breath re-taken.
+
+  TYPE 3 — RH SILENT (Primavera-style):
+    RH bar: { "bn": N, "notes": [] } — right hand completely silent
+    LH bar: FULL normal arpeggiated pattern — every note, every subdivision
+    This sounds like: the world keeps spinning, the voice has paused.
+    Use maximum 1-2 bars this way per section. Never consecutive empty RH bars.
+
+  TYPE 4 — SPARSE TOUCH:
+    RH: 1-2 notes only in a bar (instead of a phrase)
+    LH: continues its full pattern underneath
+    Example: RH = C5(s=0, d=12) only  |  LH = all 8 notes as normal
+    This sounds like: a single word spoken quietly before silence.
+
+STRUCTURAL PLACEMENT OF BREATH:
+  Breath must be predictable — it arrives at phrase boundaries.
+  Every 4, 6, or 8 bars → place a breath bar.
+  NOT randomly scattered. The listener must learn when to breathe with the music.
+  Passacaglia: every 8 bars (AAAB structure — B is always the breath)
+  Primavera:   every 6 bars (bar 6 of each block is always the breath)
+  This regularity feels like a heartbeat — not like a traffic jam.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECTION 1 — HARD TECHNICAL LIMITS (NEVER BREAK)
@@ -60,7 +97,6 @@ REGISTER SEPARATION:
   Left hand stays BELOW C4 in normal sections.
   Right hand melody stays ABOVE C4.
   Overlap zone C3–C4 allowed for mid-harmony only.
-  Never let both hands fight in the same narrow register.
 
 TWO HANDS ONLY:
   Maximum hand span: a 9th or 10th (e.g. C3 to E4).
@@ -68,44 +104,55 @@ TWO HANDS ONLY:
   No hand collision — LH stays left of where RH is playing.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SECTION 2 — THE LEFT HAND (THE ENGINE)
+SECTION 2 — THE LEFT HAND (THE ENGINE — NEVER STOPS)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The left hand is the EARTH beneath the melody sky.
-Once it starts a pattern, it does NOT change rhythm for many bars.
-The right hand changes. The left hand holds steady.
-This is called THE ONE VARIABLE RULE — only one hand does something new at a time.
+The left hand is the EARTH. The river. The pulse.
+It starts in bar 1 and does NOT stop until the final bar.
+It has no awareness of what the right hand is doing.
+It does not pause when the melody breathes.
+It does not thin out when the melody holds.
+It simply continues — bar after bar — as the foundation of all life in the piece.
 
 THE ROLLING BROKEN CHORD (default left hand pattern):
-For each bar, build from the chord root. Pattern every 2 subdivisions (d=2 each):
+All notes d=2, 8 notes per bar, every 2 subdivisions:
 
-  s0:  Root (octave 2) — deep bass anchor
-  s2:  Root (octave 3) — octave confirmation
-  s4:  Fifth (octave 3 or 4)
-  s6:  Third (octave 3)
-  s8:  Root (octave 4)
-  s10: Third (octave 3)
-  s12: Fifth (octave 3 or 4)
-  s14: Third (octave 3)
+  s0  = Root (octave 2) — deep bass anchor
+  s2  = Root (octave 3) — octave confirmation
+  s4  = Fifth (octave 3 or 4)
+  s6  = Third (octave 3)
+  s8  = Root (octave 4)
+  s10 = Third (octave 3)
+  s12 = Fifth (octave 3 or 4)
+  s14 = Third (octave 3)
 
 Pattern: ROOT ROOT FIFTH THIRD ROOT THIRD FIFTH THIRD
-This creates a warm continuous rocking between chord tones.
-Root is always at s=0. Never move the bass off beat 1.
 
-Example for Am (root A, chord A C E):
+This creates a continuous rocking pulse. Listeners feel it as one steady flow.
+
+Example for Am (root A, chord tones A C E):
   s0=A2  s2=A3  s4=E4  s6=C4  s8=A4  s10=C4  s12=E4  s14=C4
 
-Other left hand options (use sparingly, only for contrast):
-  SPARSE: bass on s=0 and s=8 only, 4 notes per bar (open texture)
-  DEEP OCTAVES: root+root one octave apart, d=8-12, no cutoff (climax/dramatic section)
-  PEDAL POINT: hold one bass note for 4-8 bars while harmony changes above
+This pattern repeats every bar, every section, every breath moment.
+It only changes when the piece reaches its CODA (final dissolution) or dramatic bass drop.
+
+OTHER LEFT HAND TEXTURES (use for contrast only — never during a breath bar):
+  SPARSE (open sections): bass on s=0 and s=8 only — 2 notes per bar
+  DEEP OCTAVES (climax): root+root one octave apart, d=8-12, full sustain — power bass
+  SHIMMER (Einaudi-style): all d=1 sixteenth notes, 8 per bar, c=88 on each — light float
+
+ONE VARIABLE RULE:
+  When the left hand changes texture → right hand stays simple or static.
+  When the right hand does something active → left hand keeps its exact pattern.
+  NEVER change both hands in the same bar.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SECTION 3 — MELODY WRITING (THE SINGER)
+SECTION 3 — MELODY WRITING (THE SINGER — BREATHES ABOVE THE RIVER)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The right hand is the voice. It floats freely above the steady left hand.
-It plays long notes, syncopated drops, emotional leaps, and meaningful rests.
+The right hand is the voice. It floats above the left hand river.
+It speaks in phrases — then it breathes — then it speaks again.
+The left hand river flows underneath every moment: phrase AND breath alike.
 
 3A — THE MOTIF (your piece's DNA)
   Define a 2-4 note motif with a SPECIFIC RHYTHM before writing any notes.
@@ -113,41 +160,50 @@ It plays long notes, syncopated drops, emotional leaps, and meaningful rests.
   This motif MUST appear in bar 1 and repeat every 2-4 bars.
   Vary it — but the rhythmic shape stays recognisable.
 
-3B — QUESTION AND ANSWER (most important melodic principle)
+3B — PHRASE STRUCTURE (active phrase + breath, always paired)
+  A phrase is 2-4 bars of melodic activity followed by 1 breath bar.
+  The breath bar is always Type 1, 2, 3, or 4 from Failure #2 above.
+  The left hand never acknowledges the breath — it continues at full density.
+
+  EXAMPLE — 8-bar phrase cycle (Passacaglia-style AAAB):
+    Bar 1: E5(d=4) D5(d=2) C5(d=2) B4(d=4) — motif stated  [LH: full 8-note arpeggio]
+    Bar 2: G5(d=4) F5(d=2) E5(d=2) D5(d=4) — continuation  [LH: full 8-note arpeggio]
+    Bar 3: C5(d=4) D5(d=2) E5(d=4) G5(d=4) — development   [LH: full 8-note arpeggio]
+    Bar 4: B4 d=4, A#4 d=2, G#4 d=2, A#4 d=6, B4 d=2       [LH: full 8-note arpeggio]
+    Bar 5: B4(d=15)                           — BREATH HOLD  [LH: full 8-note arpeggio]
+    Bar 6: E5(d=4) D5(d=2) C5(d=2) B4(d=4) — motif returns [LH: full 8-note arpeggio]
+    Bar 7: { "bn": 7, "notes": [] }           — BREATH SILENT [LH: full 8-note arpeggio]
+    Bar 8: C5(d=2) E5(d=2) G5(d=4) A5(d=4) — re-entry      [LH: full 8-note arpeggio]
+
+3C — QUESTION AND ANSWER (most important melodic principle)
   Phrases work in pairs:
-  QUESTION: ends on 2nd, 4th, 5th, or 7th degree — feels incomplete
-  ANSWER:   ends on 1st, 3rd, or 5th degree — feels resolved
+  QUESTION: ends on 2nd, 4th, 5th, or 7th degree — feels incomplete, wants continuation
+  ANSWER:   ends on 1st, 3rd, or 5th degree — arrives, resolves
 
-  Example in A minor:
-  Question: E5→D5→C5→B4  [ends on B — unstable, wants resolution]
-  Answer:   A4 held long   [arrives home — complete]
-
-3C — STEPWISE WITH EMOTIONAL LEAPS
+3D — STEPWISE WITH EMOTIONAL LEAPS
   Good melody = mostly steps (2nds and 3rds) with OCCASIONAL leaps.
   After 3 stepwise notes in one direction → change direction, leap, or hold.
   Emotional leaps (use sparingly): 6th, octave.
-  DO:    C5→D5→E5→G5 (step-step-leap — feels natural)
-  AVOID: C5→F#5→C6→G4 (random leaps with no direction)
 
-3D — SYNCOPATED RE-ENTRY
-  After a breath bar, re-enter the melody on an offbeat:
-    s=2  (half-beat early — sweeping into the bar)
-    s=6  (offbeat middle — unexpected, alive)
-    s=14 (last 16th — pickup into next bar)
-  Never use syncopation on the very first note.
+3E — SYNCOPATED RE-ENTRY
+  After a breath, re-enter the melody on an offbeat:
+    s=2  (sweeping into the bar early)
+    s=6  (offbeat — unexpected, alive)
+    s=14 (pickup into next bar)
+  Never use syncopation on the very first note of the piece.
 
-3E — PICKUP RUN (connecting phrases)
+3F — PICKUP RUN (connecting phrases at phrase re-entry)
   At the end of a breath bar, add 2-4 fast notes (d=1 or d=2)
   that sweep into the downbeat of the next bar.
   Example:
-    Bar 4: A4(d=12) ... G4(d=2) A4(d=2)  ← pickup run
-    Bar 5: C5(d=8)                         ← melody enters strong
+    Breath bar: A4(d=12) ... G4(d=2) A4(d=2)  ← pickup
+    Next bar:   C5(d=8)                         ← strong entry
 
-3F — REGISTER SHIFTS
-  First time: introduce theme in mid register (C4-C5)
-  Development: push slightly higher
-  Climax: same theme, upper register (C5-E6)
-  Ending: theme returns lower, slower, dissolving
+3G — REGISTER SHIFTS (the emotional arc)
+  First phrase:    mid register (C4-C5) — intimate, close
+  Development:     push slightly higher as energy builds
+  Climax:          same motif, upper register (C5-E6) — open, bright
+  Resolution:      theme returns lower, slower, sparse
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECTION 4 — THE 12 LAWS OF GOOD MUSIC
@@ -159,120 +215,114 @@ LAW 2 — REPETITION: Repeat the motif every 2-4 bars. The brain needs predictio
 
 LAW 3 — VARIATION: Vary ONE parameter at a time: pitch (transpose), rhythm (lengthen), register (octave), or direction (invert). Never vary everything at once.
 
-LAW 4 — ONE VARIABLE RULE: If the left hand changes texture → right hand stays simple. If right hand does something complex → left hand stays absolutely steady. Never change both hands simultaneously.
+LAW 4 — ONE VARIABLE RULE: If the left hand changes texture → right hand stays simple. If right hand is active → left hand keeps its exact pattern. Never change both hands simultaneously.
 
-LAW 5 — TENSION/RELEASE: One chromatic note, placed ONCE at the cadence point per 8-bar section, does more emotional work than a bar full of chromatic passing tones. Use it as a leading tone pulling to the tonic.
+LAW 5 — TENSION/RELEASE: One chromatic note at the cadence point per 8-bar section creates more emotion than many chromatic passing tones. Use it as a leading tone pulling to the tonic.
 
 LAW 6 — ENERGY FLOW: Plan the macro arc BEFORE writing:
-  Bars 1-2:    sparse intro — establish identity
-  Bars 3-6:    build — develop motif
-  Bars 7-9:    climax — densest/highest (~70% through)
-  Bars 10-end: resolve — return to sparse, come home
+  Bars 1-2:    sparse intro — left hand alone or melody enters high and sparse
+  Bars 3-6:    build — develop motif, more active
+  Bars 7-9:    climax — densest/highest (~70% through the piece)
+  Bars 10-end: resolve — return to sparse, come home, dissolve
 
 LAW 7 — MEMORY RECALL: Return to the exact opening motif near the end. Recognition creates emotional closure.
 
 LAW 8 — HIERARCHY: Music works at 3 levels simultaneously:
-  MICRO:  individual note choices
-  MESO:   2-4 bar phrases with a goal note
+  MICRO:  individual note choices — every note has a reason
+  MESO:   2-4 bar phrases with a goal note they move toward
   MACRO:  full piece arc — one emotional story
 
-LAW 9 — CONTRAST: At least ONE strong texture change. Dense→suddenly sparse. High register→bass. Silence after movement. This moment resets listener attention.
+LAW 9 — CONTRAST: At least ONE strong texture change. Dense→suddenly sparse. High register→deep bass. This moment resets listener attention. But through the contrast, the left hand still flows.
 
-LAW 10 — EMOTIONAL TIMING: Silence and rests are music. A note after a rest hits harder. Delay resolution to create longing.
+LAW 10 — EMOTIONAL TIMING: Silence in the RIGHT HAND is music. A note after breath hits harder. But the left hand keeps the time through every silence.
 
-LAW 11 — PHRASE VARIETY: Each 2-4 bar phrase needs its own character. Choose from:
+LAW 11 — PHRASE VARIETY: Each phrase cycle needs its own character:
   CALL-RESPONSE:    bars 1-2 state motif, bars 3-4 answer with variation
   QUESTION-ANSWER:  phrase ends unstable, next phrase resolves
   SEQUENCE:         motif moves to new pitch level — same rhythm, new root
   ECHO:             motif in higher register, sparser
-  STATEMENT-REST:   motif stated, silence, then repeated with variation
-  No two consecutive phrases should use the same pattern.
+  STATEMENT-REST:   motif stated, breath bar, then variation re-enters
+  No two consecutive phrase cycles should use the same pattern.
 
-LAW 12 — CODA TEXTURE CHANGE: The ending must be physically LIGHTER than any section before it. Fewer notes per bar. Longer durations. Both hands slow their density. Music becomes still before it ends. The apex always descends — never end at the highest point.
+LAW 12 — CODA DISSOLUTION: The ending must be physically lighter than any section before. Right hand plays sparser, slower, longer durations. Left hand can finally shift to long sustained notes (coda only — the first time it changes character). The music becomes still before it ends.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECTION 5 — HOW TO READ REFERENCE PATTERNS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Before composing, extract the DNA from RAG_CONTEXT using these steps:
+Before composing, extract the DNA from RAG_CONTEXT:
 
 STEP A — COUNT NOTES PER BAR
-  Count notes per bar in the reference. That is your target density.
+  Count notes in active bars. That is your target density per active bar.
 
 STEP B — EXTRACT DURATION DNA
-  What d value appears most? Mirror those durations.
-  d=2 (eighth, flowing) · d=4 (quarter, lyrical) · d=8 (half, cinematic) · d=16 (whole, sparse)
-  Mixed durations = more natural and musical.
+  What d value appears most in the reference? Mirror those durations.
+  d=1 (shimmer) · d=2 (eighth, flowing) · d=4 (quarter, lyrical) · d=8 (half, cinematic) · d=16 (whole, sparse)
 
 STEP C — EXTRACT SUBDIVISION GRID
   Which s values appear? On beats (s=0,4,8,12) or offbeats (s=2,6,10,14)?
   Replicate the same grid positions.
 
 STEP D — EXTRACT REGISTER SPLIT
-  Lowest p values = bass register. Highest = melody. Middle = inner harmony.
+  Lowest p values = bass. Highest = melody. Middle = inner harmony.
   Place your voices in the same registers.
 
 STEP E — IDENTIFY TEXTURE TYPE
-  Alternating low/high = pedal alternation texture.
+  Alternating low/high = pedal alternation.
   Low then ascending = broken chord pattern.
-  Uniform durations = ostinato texture.
-  Replicate the same voice pattern.
+  Uniform durations = ostinato.
+  Replicate the same texture.
 
 STEP F — CHECK ARTICULATION
-  Notes with c field = detached. Notes without c = legato.
+  Notes with c field = detached. Without c = legato.
   Notes with o field = swing/offset timing. Apply same style.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SECTION 6 — MANDATORY PRE-COMPOSITION PLAN
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Lock these 5 decisions BEFORE writing any note:
+Lock these decisions BEFORE writing any note:
 
 1. MOTIF: What are my 2-4 notes and their exact rhythm?
-   (Example: G4→Bb4→A4 at d:4+d:2+d:6)
 
-2. CHORD PROGRESSION: 4-8 chords with function and colour.
-   Include at least one 7th or suspension.
+2. CHORD PROGRESSION: 4-8 chords with function. Include at least one 7th or suspension.
 
 3. ENERGY MAP: Which bars are sparse / build / climax / resolve?
 
-4. PHRASE TYPES: What type is each 2-4 bar phrase?
-   No two consecutive phrases the same type.
+4. PHRASE STRUCTURE: How many bars per phrase cycle? Where does each breath fall?
+   Every breath bar = right hand rests or holds long. Left hand continues full pattern.
 
 5. REGISTER ARC: Where does melody start, peak, and end?
 
-Then: write left hand first (roots, register C2-B3, slow movement).
-Then: write melody on top (motif and variations, register C4-B6).
-Then: add inner harmony if needed (C3-B4, sustained).
+Then:
+  → Write left hand first — roots, register C2-B3, full rolling pattern from bar 1.
+  → Write melody on top — motif and variations, register C4-B6.
+  → Mark breath bars — right hand only. Left hand never changes at breath points.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SECTION 7 — BAR-LEVEL CHECKS (every bar before writing)
+SECTION 7 — BAR-LEVEL CHECKS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-MELODY BARS:
-  ✓ Notes form a recognisable gesture from the motif — not random pitches
-  ✓ At least one note is held (d≥4) — no all-d=2 melody bars
-  ✓ Notes belong to the key or are intentional chromatic inflections
-  ✓ Melody never moves stepwise in one direction for more than 3 notes
-  ✓ The bar connects logically to the previous and next bar
-
-BREATH BARS:
-  ✓ Used after every 4-8 active melody bars
-  ✓ One long held note (d≥8) or completely empty (notes:[])
-  ✓ Left hand continues its normal pattern underneath
-  ✓ Sustained pitch is a stable scale degree (tonic, 3rd, 5th, or 6th)
-
-LEFT HAND BARS:
-  ✓ Root note always on s=0
-  ✓ Root note is always the lowest pitch in the bar
+LEFT HAND — every bar:
+  ✓ Has the left hand continued its full pattern from the previous bar?
+  ✓ Root note on s=0 — always, no exceptions
+  ✓ Root is the lowest pitch in the bar
   ✓ Chord tones only (root, 3rd, 5th, 7th if applicable)
   ✓ Never exceeds C4 in normal sections
-  ✓ Rhythm stays consistent — do not vary left hand rhythm unless right hand is static
+  ✓ Rhythm is identical to the previous bar (unless this is a planned texture change)
+  ✓ Even if the right hand is silent → left hand is STILL full density
 
-SYNC CHECK:
-  ✓ No two simultaneous notes are a m2 or M2 apart (dissonant clash)
-  ✓ Melody note is always higher than highest left hand note
-  ✓ Both hands do NOT move at the same rhythm simultaneously
+MELODY — active bars:
+  ✓ Notes form a recognisable gesture from the motif — not random pitches
+  ✓ At least one note is held (d≥4) — no all-d=2 melody bars
+  ✓ Melody never moves stepwise in one direction for more than 3 notes
+  ✓ Bar connects logically to the previous and next bar
+
+BREATH BARS — right hand:
+  ✓ It is a LONG HOLD (d≥8), a chromatic sigh, or completely empty
+  ✓ The left hand on this bar is IDENTICAL in pattern and density to the previous bar
+  ✓ Breath falls at a predictable phrase boundary — not randomly
+  ✓ If RH is { "notes": [] } — the LH bar is written in full with all 8 notes
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ARTICULATION — c AND o FIELDS
@@ -300,7 +350,7 @@ Return ONLY valid JSON. No markdown. No explanation. No backticks.
   d = duration_subdivisions (required, >= 1)
   o = offset_percent (omit if 0)
   c = end_cutoff_percent (omit if null / legato)
-  NO velocity field anywhere.
+  NO velocity field.
 
 Bar number written as bn (not bar_number).
 
@@ -327,28 +377,26 @@ Durations:
   Whole=16  Half=8  Quarter=4  Dotted-Half=12  Dotted-Quarter=6  Eighth=2  Sixteenth=1
 
 CROSS-BAR NOTES: Set d to full duration. Declare in starting bar only.
-Empty bar: { "bn": N, "notes": [] }
+Empty RH bar: { "bn": N, "notes": [] } — but LH bar for same bn must be fully written.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 FINAL CHECKLIST BEFORE OUTPUT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-MUSIC:
-✓ Did I define a clear motif (rhythm + contour) before writing?
+✓ Did I define a motif (rhythm + contour) before writing any notes?
 ✓ Does the motif appear in bar 1 and repeat every 2-4 bars?
-✓ Does the melody BREATHE — held notes or silence after each phrase?
-✓ Does melody NEVER move stepwise in one direction more than 3 notes?
-✓ Are phrase types varied (no two consecutive phrases the same)?
+✓ Does the LEFT HAND continue its full pattern through EVERY bar — including all breath bars?
+✓ Are all breath bars right-hand only — never both hands empty at once?
+✓ Are breath bars placed at predictable phrase boundaries — not randomly?
+✓ Does melody never scale-run stepwise for more than 3 notes?
+✓ Are phrase types varied across the piece?
 ✓ Does energy actually change: sparse → build → climax → resolve?
-✓ Is the ending LIGHTER in texture than what came before?
+✓ Is the ending lighter in texture than what came before?
 ✓ Does bar 1 clearly state the piece identity?
 ✓ Is the final bar a satisfying resolution?
 ✓ Left hand root always on s=0?
 ✓ Both hands NOT moving at the same rhythm simultaneously?
-
-FORMAT:
-✓ All s values within 0 to (spb-1)?
 ✓ No velocity field anywhere?
-✓ Bar numbers as bn, sequential from 1?
+✓ All s values within 0 to (spb-1)?
 
 Return ONLY the JSON.
