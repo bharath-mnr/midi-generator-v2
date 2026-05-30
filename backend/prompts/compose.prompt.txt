@@ -38,63 +38,96 @@ FAILURE B — SCALE RUNS (destroys melody)
   Break it: add a leap, a direction change, a hold, or a rest.
 
 FAILURE C — BOTH HANDS STOPPING TOGETHER
-  NEVER write a bar where both hands are empty or silent simultaneously.
-  That is a dead crash in the audio. The left hand foundation NEVER stops
-  (until the very final coda dissolution, which is a planned texture change).
-  If the right hand breathes → the left hand continues its full pattern underneath.
+  NEVER write a bar where all voices go completely silent simultaneously (except the very final bar).
+  That is a dead crash in the audio.
+  For FAMILY 2 (split voice): the left hand pattern NEVER stops. If RH breathes, LH continues full pattern.
+  For FAMILY 1 (unified sweep): the sweep never stops — it may thin out (fewer notes, longer d) but never fully cuts.
+  For FAMILY 3 (sparse lyrical): near-silence is allowed but always at least one voice sustains.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRIORITY 1 — REFERENCE DATA EXTRACTION (DO THIS BEFORE COMPOSING)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The RAG_CONTEXT above is the most important technical input you have.
-These are REAL bars from REAL reference tracks in the knowledge base.
-Before writing a single note, extract the following DNA from those chunks:
+The RAG_CONTEXT above is the most important input you have.
+These are REAL bars from REAL reference tracks. Study them carefully.
+Before writing a single note, do these extractions in order.
 
-EXTRACT A — TEXTURE IDENTITY
-  What is the left hand doing? Count its notes per bar and its d values.
-  Is it: rolling broken chord (8 notes d=2) / shimmer (8 notes d=1) / sparse bass (2-4 notes d=8) / ostinato / pulse octaves?
-  This IS your left hand texture. Use it.
+━━ STEP 0 — IDENTIFY TEXTURE FAMILY (do this first, everything else depends on it)
 
-EXTRACT B — DENSITY
-  Count notes per bar in the reference. That is your target density.
-  Active bars: how many notes? Sparse bars: how many?
-  Match this density profile across your composition.
+Look at the reference bars and count notes per bar, their pitch spread, and their d values.
+Then identify which texture family it belongs to:
 
-EXTRACT C — DURATION DNA
-  What d values appear most in the reference?
-  d=1 (shimmer) / d=2 (eighth flow) / d=4 (quarter lyrical) / d=8 (half cinematic) / d=16 (whole sparse)
-  Mixed durations = more musical. All-same duration = mechanical.
-  Mirror the reference's duration mix.
+FAMILY 1 — UNIFIED SWEEP ARPEGGIO (e.g. Evergreen / Two Steps From Hell style)
+  Signs: 4-8 notes per bar, ALL same duration (all d=2 or all d=4), pitches span from low to very high,
+  no clear register boundary between "left" and "right" hand — it's ONE flowing voice through all registers.
+  Bass note at s=0 changes each bar following chord progression.
+  Upper notes oscillate between a pair of pitches (e.g. E5↔G5, F5↔A5).
+  → In this family: do NOT add a separate left hand pattern. The entire bar IS the texture.
+    Replicate the oscillating sweep exactly. Bass note on s=0. Oscillating pair fills the rest.
+    The "melody" is implied by which pair oscillates at the top.
+    Energy arc = register climb (staircase) — same pattern, higher octave each section.
 
-EXTRACT D — SUBDIVISION GRID
-  Which s values does the reference use?
-  On beats: s=0,4,8,12. Offbeats: s=2,6,10,14. Sixteenth grid: s=1,3,5,7...
-  Replicate the same grid positions. If the reference uses s=0,2,4,6,8,10,12,14 → you use the same.
-  If it uses s=0,4,8,12 only → you use the same.
+FAMILY 2 — SPLIT VOICE (LH engine + RH melody, e.g. Passacaglia / Einaudi)
+  Signs: clear pitch register gap — low notes (oct 1-3) are dense/rhythmic, high notes (oct 4-6) are melodic/varied.
+  LH has a repeating rhythmic cell (8 notes d=2, or shimmer d=1). RH has a singable phrase.
+  → In this family: write LH rolling pattern continuously + RH melody floating above.
+    See Priority 3 and 4 for full instructions.
 
-EXTRACT E — REGISTER SPLIT
-  What are the lowest pitches? That is your left hand register.
-  What are the highest pitches? That is your melody register.
-  Middle pitches = inner harmony.
-  Place your voices in the same register zones.
+FAMILY 3 — SPARSE LYRICAL (e.g. Gibran Alcocer / slow cinematic)
+  Signs: very few notes per bar (2-5), long durations (d=8, d=12, d=16), wide empty space.
+  Notes are placed with intention — each one carries emotional weight.
+  → In this family: prioritise space and silence. Long held notes. Few but meaningful gestures.
+    LH may be 2-3 long bass notes per bar. RH 1-3 notes, widely spaced.
 
-EXTRACT F — ARTICULATION
-  Notes with c field = detached/staccato. Without c = legato/full sustain.
-  Notes with o field = micro-timing offset. Apply the same articulation character.
+FAMILY 4 — OSTINATO PULSE (e.g. fast rhythmic, driving)
+  Signs: same pitch pattern repeating every 2-4 subdivisions, dense and mechanical.
+  Pitches change but rhythm is locked. Feels hypnotic.
+  → In this family: lock the rhythm absolutely. Vary only pitches. Never break the pulse.
 
-EXTRACT G — MOTIF / CELL IDENTITY
-  Is there a repeating pitch pattern in the reference? A rhythmic cell that recurs?
-  That is the identity DNA. Use it as your starting point.
-  Do NOT invent a completely different identity if the reference has a clear one.
+IDENTIFY your reference as Family 1, 2, 3, or 4 before proceeding.
+Then follow the instructions for that family throughout composition.
 
-EXTRACT H — PHRASE STRUCTURE
-  How many bars between pattern changes in the reference?
-  2-bar loops / 4-bar loops / 6-bar loops / 8-bar loops?
-  Use the same phrase length.
+━━ STEP 1 — EXTRACT NOTES PER BAR (density target)
+  Count notes in a typical reference bar. That is your target density per bar.
+  Do not add more or fewer notes than the reference uses.
 
-After extracting all 8 points — compose using that DNA as your foundation.
-Your composition is not random — it is a NEW PIECE built from the SAME GENETIC MATERIAL.
+━━ STEP 2 — EXTRACT DURATION DNA
+  What d values appear? List them.
+  d=1 (shimmer) / d=2 (eighth flow) / d=4 (quarter) / d=8 (half) / d=16 (whole)
+  If reference is ALL d=2 → your composition is also all d=2 in that texture section.
+  If reference mixes durations → mix the same way.
+
+━━ STEP 3 — EXTRACT SUBDIVISION GRID
+  Which s values appear? Write them down exactly.
+  3/4 (spb=12): s=0,2,4,6,8,10 = sixth-note grid. s=0,4,8 = beat grid.
+  4/4 (spb=16): s=0,4,8,12 = beat grid. s=0,2,4,6,8,10,12,14 = eighth grid.
+  Replicate EXACTLY the same s positions. Do not invent new grid positions.
+
+━━ STEP 4 — EXTRACT REGISTER ZONES
+  What is the lowest pitch? What is the highest pitch? What is the range?
+  Map the register arc across the reference bars — does it climb, fall, stay stable?
+  Replicate the same register arc in your composition.
+
+━━ STEP 5 — EXTRACT CHORD PROGRESSION
+  The bass note (lowest pitch each bar, usually s=0) traces the chord progression.
+  List the bass notes across bars. That IS the harmonic ground.
+  Use the same chord progression or a close relative in the same key.
+
+━━ STEP 6 — EXTRACT OSCILLATION / MOTIF PATTERN
+  For Family 1: what is the oscillating pair at the top? (e.g. E5↔G5, F5↔A5)
+  For Family 2: what is the 2-4 note melodic motif and its rhythm?
+  For Family 3: what is the characteristic gesture (a specific interval, a sigh, a hold)?
+  For Family 4: what is the exact rhythmic cell that repeats?
+  This IS your compositional identity. Use it.
+
+━━ STEP 7 — EXTRACT ARTICULATION AND FEEL
+  Notes with c field: detached. Without c: legato/sustained. With o: micro-timed.
+  If reference has no c fields → your composition is legato throughout.
+  If reference has c=88 on all notes → replicate that shimmer articulation.
+
+After all 7 steps — compose using that DNA as your foundation.
+Your composition is a NEW PIECE built from the SAME GENETIC MATERIAL as the reference.
+The reference is not decoration — it is the blueprint. Follow it structurally.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRIORITY 2 — THE 12 LAWS OF GOOD MUSIC
