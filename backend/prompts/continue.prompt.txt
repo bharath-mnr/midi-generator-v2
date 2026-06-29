@@ -1,40 +1,82 @@
-You are an expert music composer. Your previous JSON output had validation errors.
-You must fix ALL errors and return a corrected JSON.
+You are an expert MIDI composer. Your previous attempt had validation errors.
+Study the errors carefully, fix them, and return a corrected composition in COMPACT STRING format.
 
-## ORIGINAL USER REQUEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ORIGINAL REQUEST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {{USER_PROMPT}}
 
-## REFERENCE MATERIAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REFERENCE MATERIAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {{RAG_CONTEXT}}
 
-## YOUR PREVIOUS (INVALID) JSON
-{{BAD_JSON}}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR PREVIOUS OUTPUT (with errors)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{{BAD_OUTPUT}}
 
-## VALIDATION ERRORS TO FIX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VALIDATION ERRORS TO FIX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {{ERRORS}}
 
-## RULES (read carefully — same as before)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMMON ERRORS AND HOW TO FIX THEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-PITCH FORMAT: C4, D#3, Bb2, F#5 — note name + optional sharp/flat + octave number.
+"No compact string (H: ...) found"
+  → Your response must start with H: ... on the very first line. No preamble. No markdown. No backticks.
 
-COMPACT NOTE FORMAT: { "p":"C4", "s":0, "d":4 }
-  p = pitch (required)
-  s = start_subdivision (required, 0 to spb-1)
-  d = duration_subdivisions (required, >= 1)
-  o = offset_percent (optional, omit if 0)
-  c = end_cutoff_percent (optional, omit if null / legato)
-  NO velocity field anywhere.
+"Missing header line (H: ...)"
+  → The first line must be: H: <tempo>|<time_sig>|<key>|<spb>
+  → Example: H: 85|4/4|Dm|16
 
-Bar number written as bn (not bar_number).
+"Malformed header"
+  → Header must have exactly 4 pipe-separated fields: tempo|time_sig|key|spb
+  → Example: H: 72|3/4|Am|12
 
-SUBDIVISION RULES:
-- 4/4 → subdivisions_per_bar = 16, s range 0–15
-- 3/4 → subdivisions_per_bar = 12, s range 0–11
-- 6/8 → subdivisions_per_bar = 12, s range 0–11
-- d must be >= 1
+"note missing required fields (p,s,d)"
+  → Every note needs exactly 3 required fields in order: pitch, start_subdivision, duration
+  → Example: C4,0,4 — NOT just C4,0 or C4
 
-CROSS-BAR NOTES: Set d to full length. Declare in starting bar only.
-EMPTY BAR: { "bn": N, "notes": [] }
+"invalid pitch format"
+  → Pitch must match [A-G][#b]?[octave], e.g. C4, F#3, Bb5, D2
+  → NOT: "C", "4C", "middle C", "MIDI 60"
 
-OUTPUT: Return ONLY the corrected JSON object. No explanation, no markdown, no backticks.
-Fix every single error listed above. Do not introduce new errors.
+"start_subdivision out of range"
+  → For 4/4 (spb=16): s must be 0–15. For 3/4 or 6/8 (spb=12): s must be 0–11.
+  → Beat 1=s0  Beat 2=s4  Beat 3=s8  Beat 4=s12 (in 4/4)
+
+"unrecognized token"
+  → The only optional tokens are oNN (offset) and cNN (cutoff)
+  → Do NOT write: v100 (velocity), l1 (legato), or any other extra tokens
+  → Do NOT write o0 — omit the o token entirely when offset is zero
+  → Do NOT write c100 or cnull — omit the c token entirely for full sustain
+
+"Alternating bars" (musical error):
+  → Both hands go in THE SAME BAR's note list. Bar numbers never repeat.
+  → WRONG: B1: (melody); B2: (bass for bar1); B3: (melody); B4: (bass for bar3)
+  → CORRECT: B1: bass_note; melody_note; inner_note (all in one line)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT FORMAT — COMPACT STRING (corrected version)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Return ONLY the corrected compact string. No JSON. No markdown. No backticks. No explanation.
+
+H: tempo|time_signature|key|subdivisions_per_bar
+B1: p,s,d ; p,s,d ; p,s,d ...
+B2: p,s,d ; p,s,d
+B3:
+...
+
+Rules:
+- Start output with H: — nothing before it
+- Every bar number 1 to N appears exactly once
+- Both hands in every active bar
+- No velocity token anywhere
+- oNN only when offset > 0; cNN only when not full sustain
+- Cross-bar notes: full d in starting bar, empty B<n>: for held bars
+
+Return ONLY the compact string, starting with H:

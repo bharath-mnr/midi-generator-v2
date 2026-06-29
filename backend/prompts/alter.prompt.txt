@@ -1,5 +1,5 @@
 You are a world-class arranger and orchestrator.
-You have been given an existing MIDI composition as JSON. Your job is to ADD new musical layers to it — do NOT change or remove any existing notes.
+You have been given an existing MIDI composition. Your job is to ADD new musical layers to it — do NOT change or remove any existing notes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 THE EXISTING COMPOSITION
@@ -22,28 +22,28 @@ THE REQUEST
 MUSIC ARCHITECTURE — RULES FOR ADDING LAYERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-When adding new layers, these laws must govern what you add:
+IDENTITY: Your additions must SUPPORT or COMPLEMENT the existing motif, not create a competing melodic line.
 
-IDENTITY: Your additions must not fight the existing identity. They should SUPPORT or COMPLEMENT the existing motif, not create a competing melodic line.
+CONTINUITY: Voice-lead any new inner harmony. Move smoothly from bar to bar.
 
-CONTINUITY: Voice-lead any new inner harmony. Move smoothly from bar to bar. No sudden jumps in new voices.
+CONTRAST: If the existing track is dense → add sparse sustained notes. If sparse → add gentle inner movement.
 
-CONTRAST: If the existing track is dense → add sparse sustained notes. If the existing track is sparse → add gentle inner movement. Never double the existing density without purpose.
+REGISTER: Place new notes in a DIFFERENT register zone than existing notes.
+  If existing notes are in C4–E5, add new notes in C2–B3 (bass) or F5–B6 (high harmony).
 
-REGISTER: Study the existing note pitches. Place new notes in a DIFFERENT register zone than existing notes to avoid mud. If existing notes are in C4–E5, add new notes in C2–B3 (bass) or F5–B6 (high harmony).
+ENERGY: Your additions should follow the same energy arc as the existing piece.
 
-ENERGY: Your additions should follow the same energy arc as the existing piece. If bars 1–4 are sparse and bars 9–12 are dense, match that shape.
-
-RHYTHMIC COUNTERFLOW: Do NOT duplicate the existing rhythm exactly. Add rhythmic contrast — if existing notes hit on beats, your additions can use offbeats (s:2, s:6, s:10, s:14) or longer sustained notes.
+RHYTHMIC COUNTERFLOW: Do NOT duplicate the existing rhythm exactly. Add rhythmic contrast.
+  If existing notes hit on beats, your additions can use offbeats (s:2, s:6, s:10, s:14) or longer sustained notes.
 
 RULES FOR NEW LAYERS:
 - Stay in key: {{KEY}}
 - Match tempo: {{TEMPO}} BPM, time signature: {{TIME_SIG}}
-- Place notes in a DIFFERENT register from existing notes (check existing p values)
+- Place notes in a DIFFERENT register from existing notes
 - Voice lead smoothly — avoid parallel fifths or octaves with existing notes
-- Add rhythmic contrast — if existing notes move in quarters, add held or syncopated notes
+- Add rhythmic contrast
 - Cover all {{BAR_COUNT}} bars
-- Do NOT place a note at the same pitch AND same start_subdivision as an existing note
+- Do NOT place a note at the same pitch AND same start subdivision as an existing note
 
 WHAT MAKES GOOD ADDITIONS:
 ✓ Sustained bass pedal notes under moving melody
@@ -55,37 +55,35 @@ WHAT MAKES GOOD ADDITIONS:
 ✗ NEVER add notes in the same register as existing melody (creates mud)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT FORMAT — COMPACT JSON
+OUTPUT FORMAT — COMPACT STRING
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Use compact note fields:
-  p = pitch
-  s = start_subdivision
-  d = duration_subdivisions
-  o = offset_percent (omit if 0)
-  c = end_cutoff_percent (omit if null / legato)
 
-Do NOT include velocity — handled externally, always 100.
-Bar number written as bn.
+Return ONLY the NEW notes in compact string format. No JSON. No markdown. No backticks. No explanation.
+Return ONLY the additions — do NOT include existing notes.
 
-Return ONLY valid JSON. No markdown. No explanation. No backticks.
+LINE 1 — HEADER (use the same tempo/time_sig/key as the existing piece):
+H: {{TEMPO}}|{{TIME_SIG}}|{{KEY}}|{{SPB}}
 
-{
-  "tempo": {{TEMPO}},
-  "time_signature": "{{TIME_SIG}}",
-  "key": "{{KEY}}",
-  "subdivisions_per_bar": {{SPB}},
-  "bars": [
-    {
-      "bn": <integer from 1>,
-      "notes": [
-        { "p": "<note><octave>", "s": <0 to {{SPB_MAX}}>, "d": <integer >= 1> }
-      ]
-    }
-  ]
-}
+LINE 2+ — ONE BAR PER LINE:
+B<n>: p,s,d ; p,s,d ...
+B<n>:                     ← empty bar (no additions for this bar)
 
-SUBDIVISION REFERENCE ({{TIME_SIG}} = {{SPB}} subdivisions per bar)
-Beat 1=s0  Beat 2=s{{B2}}  Beat 3=s{{B3}}  Beat 4=s{{B4}}
-Whole=16  Half=8  Quarter=4  Eighth=2  Sixteenth=1
+NOTE FIELD ORDER (positional):
+  p   = pitch (1st)  — e.g. C4, F#3, Bb5, D2
+  s   = start_subdivision (2nd)  — 0 to {{SPB_MAX}}
+  d   = duration_subdivisions (3rd)  — ≥1
+  oNN = offset_percent (optional)  — omit when 0
+  cNN = end_cutoff_percent (optional)  — omit when full sustain
 
-Return ONLY the new notes JSON. Do not include existing notes.
+NO velocity. Never.
+
+Every bar from 1 to {{BAR_COUNT}} must appear exactly once (use B<n>: for bars with no additions).
+
+SUBDIVISION REFERENCE ({{TIME_SIG}} = {{SPB}} subdivisions per bar):
+  Beat 1=s0  Beat 2=s{{B2}}  Beat 3=s{{B3}}  Beat 4=s{{B4}}
+  Whole=16  Half=8  Quarter=4  Eighth=2  Sixteenth=1
+
+EXAMPLE (adding a bass line over 2 bars in Am, 4/4):
+H: {{TEMPO}}|{{TIME_SIG}}|{{KEY}}|{{SPB}}
+B1: A1,0,8; E2,8,8
+B2: D1,0,16
